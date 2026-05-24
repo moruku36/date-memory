@@ -1,38 +1,79 @@
 # Date Memory
 
-写真をアップロードして、デートの思い出をメモリー再生できる静的Webサイトです。
-
-## 使い方
-
-`index.html` をブラウザで開くか、ローカルサーバーで配信してください。
-
-```sh
-python3 -m http.server 4173
-```
+写真をアップロードして、デートの思い出をメモリー再生できるWebサイトです。
 
 ## 写真の保存
 
 初期状態では写真はブラウザ内に保存されます。この場合、PCで追加した写真はスマホには表示されません。
 
-どの端末からでも同じ写真を見たい場合は、Supabaseを設定してください。設定後は写真をSupabase Storageへアップロードし、写真一覧をSupabase Databaseから読み込みます。
+PC、iPhone、別ブラウザで同じ写真を参照するには、MongoDB Atlasへ保存するAPIをデプロイしてください。このリポジトリにはVercel向けのAPIを同梱しています。
 
-## Supabase設定
+## MongoDB Atlas + Vercel設定
 
-1. Supabaseで新しいプロジェクトを作成します。
-2. Storageで `date-memory` という bucket を作成します。公開設定はprivateのままで大丈夫です。
-3. SQL Editorで [supabase.sql](supabase.sql) を実行します。
-4. Project Settings > API から Project URL と anon public key を確認します。
-5. [config.js](config.js) を編集します。
+1. MongoDB AtlasでDatabase Userを作成します。
+2. Atlasの接続文字列を取得します。形式は `mongodb+srv://USER:PASSWORD@HOST/...` です。
+3. VercelでこのGitHubリポジトリをImportします。
+4. VercelのEnvironment Variablesに以下を設定します。
+
+```txt
+MONGODB_URI=mongodb+srv://USER:PASSWORD@HOST/?retryWrites=true&w=majority
+MONGODB_DB=date_memory
+MONGODB_COLLECTION=photos
+ALBUM_ID=date-memory-main
+```
+
+削除機能もクラウドに対して有効にしたい場合だけ、以下も設定します。
+
+```txt
+ADMIN_TOKEN=推測されにくい長い文字列
+```
+
+5. VercelにDeployします。
+6. `config.js` を以下のように変更します。
+
+同じVercel上でWebサイトも動かす場合:
 
 ```js
 window.DATE_MEMORY_CLOUD = {
   enabled: true,
-  supabaseUrl: "https://YOUR_PROJECT.supabase.co",
-  supabaseAnonKey: "YOUR_ANON_PUBLIC_KEY",
-  bucket: "date-memory",
-  table: "date_memory_photos",
+  provider: "api",
+  apiBaseUrl: "",
   albumId: "date-memory-main",
+  adminToken: "",
 };
 ```
 
-`albumId` は共有アルバムの合言葉のようなものです。URLを知っている人が写真を追加・閲覧できる想定なので、必要なら推測されにくい値に変更してください。その場合は `supabase.sql` 内の `date-memory-main` も同じ値に置き換えてください。
+GitHub Pagesを表示元にして、APIだけVercelを使う場合:
+
+```js
+window.DATE_MEMORY_CLOUD = {
+  enabled: true,
+  provider: "api",
+  apiBaseUrl: "https://YOUR_VERCEL_APP.vercel.app",
+  albumId: "date-memory-main",
+  adminToken: "",
+};
+```
+
+`albumId` は共有アルバムIDです。URLを知っている人が写真を追加・閲覧できる想定なので、必要なら推測されにくい値に変更してください。
+
+## 注意
+
+MongoDBのパスワードやAPIキーを `config.js` に入れないでください。`config.js` はブラウザから誰でも読めます。秘密情報は必ずVercelのEnvironment Variablesに入れてください。
+
+すでにチャット等に貼ったキーは漏えい済みとして扱い、MongoDB Atlas側でローテーションすることをおすすめします。
+
+## ローカル確認
+
+静的サイトだけ確認する場合:
+
+```sh
+python3 -m http.server 4173
+```
+
+Vercel APIも含めて確認する場合:
+
+```sh
+npm install
+npm start
+```
