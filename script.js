@@ -3,6 +3,8 @@ const DB_VERSION = 1;
 const STORE_NAME = "photos";
 const PREFERENCES_KEY = "couple-memory-preferences";
 const DEFAULT_ALBUM_NAME = "デートのメモリー";
+const SUPABASE_MODULE_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+const CLOUD_CONFIG = window.DATE_MEMORY_CLOUD || {};
 
 const state = {
   photos: [],
@@ -13,6 +15,18 @@ const state = {
   speed: 4000,
   view: "mosaic",
   mood: "cinema",
+};
+
+const cloud = {
+  client: null,
+  ready: false,
+  loading: false,
+  error: "",
+  url: CLOUD_CONFIG.supabaseUrl || CLOUD_CONFIG.url || "",
+  anonKey: CLOUD_CONFIG.supabaseAnonKey || CLOUD_CONFIG.anonKey || "",
+  bucket: CLOUD_CONFIG.bucket || "date-memory",
+  table: CLOUD_CONFIG.table || "date_memory_photos",
+  albumId: CLOUD_CONFIG.albumId || "date-memory-main",
 };
 
 const els = {
@@ -38,6 +52,9 @@ const els = {
   albumImportInput: document.getElementById("albumImportInput"),
   exportBtn: document.getElementById("exportBtn"),
   shareStatus: document.getElementById("shareStatus"),
+  syncBadge: document.getElementById("syncBadge"),
+  syncMessage: document.getElementById("syncMessage"),
+  syncNowBtn: document.getElementById("syncNowBtn"),
   clearBtn: document.getElementById("clearBtn"),
   confirmDialog: document.getElementById("confirmDialog"),
   confirmClear: document.getElementById("confirmClear"),
@@ -101,6 +118,53 @@ function generatePhotoId() {
   return `${Date.now()}-${unique}`;
 }
 
+function isCloudConfigured() {
+  return Boolean(
+    CLOUD_CONFIG.enabled !== false
+      && cloud.url
+      && cloud.anonKey
+      && !cloud.url.includes("YOUR_")
+      && !cloud.anonKey.includes("YOUR_")
+  );
+}
+
+function cloudPhotoCount() {
+  return state.photos.filter((photo) => photo.source === "cloud").length;
+}
+
+function localOnlyPhotos() {
+  return state.photos.filter((photo) => photo.blob && photo.source !== "cloud");
+}
+
+function updateSyncStatus(message) {
+  const localCount = localOnlyPhotos().length;
+
+  if (!isCloudConfigured()) {
+    els.syncBadge.textContent = "この端末のみ";
+    els.syncMessage.textContent = message || "クラウド未設定です。Supabaseを設定すると、PCとスマホで同じ写真を見られます。";
+    els.syncNowBtn.disabled = true;
+    return;
+  }
+
+  if (cloud.loading) {
+    els.syncBadge.textContent = "同期中";
+    els.syncMessage.textContent = message || "クラウドと同期しています。";
+    els.syncNowBtn.disabled = true;
+    return;
+  }
+
+  if (!cloud.ready) {
+    els.syncBadge.textContent = "未接続";
+    els.syncMessage.textContent = message || cloud.error || "クラウドに接続できませんでした。";
+    els.syncNowBtn.disabled = true;
+    return;
+  }
+
+  els.syncBadge.textContent = "クラウド同期";
+  els.syncMessage.textContent = message || `${cloudPhotoCount()}枚をクラウドから表示しています。`;
+  els.syncNowBtn.disabled = localCount === 0;
+}
+
 function formatDate(timestamp) {
   return new Intl.DateTimeFormat("ja-JP", {
     year: "numeric",
@@ -122,6 +186,7 @@ function sortPhotos() {
 
 function createPhotoUrl(photo) {
   if (photo.url) return photo.url;
+  if (!photo.blob) return "";
   photo.url = URL.createObjectURL(photo.blob);
   return photo.url;
 }
@@ -320,6 +385,7 @@ function render() {
   renderCollections();
   renderThumbs();
   els.playBtn.classList.toggle("is-playing", state.isPlaying);
+  updateSyncStatus();
 }
 
 function nextPhoto() {
@@ -368,6 +434,198 @@ function getImageDimensions(file) {
   });
 }
 
+async function setupCloudClient() {
+  if (!isCloudConfigured()) {
+    updateSyncStatus();
+    return false;
+  }
+
+  if (cloud.ready) return true;
+
+  cloud.loading = true;
+  updateSyncStatus();
+  try {
+    const { createClient } = await import(SUPABASE_MODULE_URL);
+    cloud.client = createClient(cloud.url, cloud.anonKey);
+    cloud.ready = true;
+    cloud.error = "";
+    return true;
+  } catch (error) {
+    console.warn("Supabaseへの接続に失敗しました。", error);
+    cloud.ready = false;
+    cloud.error = "Supabaseへの接続に失敗しました。";
+    return false;
+  } finally {
+    cloud.loading = false;
+    updateSyncStatus();
+  }
+}
+
+function cloudStoragePath(photoId, fileName) {
+  const cleanedName = safeFileName(fileName || "memory-photo");
+  return `${cloud.albumId}/${photoId}-${cleanedName}`;
+}
+
+async function signedPhotoUrl(storagePath) {
+  const { data, error } = await cloud.client
+    .storage
+    .from(cloud.bucket)
+    .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+async function uploadPhotoToCloud(file, dimensions, photoId = generatePhotoId()) {
+  const storagePath = cloudStoragePath(photoId, file.name);
+  const sortTime = file.lastModified || Date.now();
+
+  const { error: uploadError } = await cloud.client
+    .storage
+    .from(cloud.bucket)
+    .upload(storagePath, file, {
+      cacheControl: "3600",
+      contentType: file.type || "image/jpeg",
+      upsert: false,
+    });
+
+  if (uploadError) throw uploadError;
+
+  const record = {
+    id: photoId,
+    album_id: cloud.albumId,
+    name: file.name,
+    type: file.type,
+    sort_time: sortTime,
+    width: dimensions.width,
+    height: dimensions.height,
+    storage_path: storagePath,
+  };
+
+  const { error: insertError } = await cloud.client
+    .from(cloud.table)
+    .insert(record);
+
+  if (insertError) {
+    await cloud.client.storage.from(cloud.bucket).remove([storagePath]);
+    throw insertError;
+  }
+
+  return {
+    id: photoId,
+    name: record.name,
+    type: record.type,
+    date: record.sort_time,
+    width: record.width,
+    height: record.height,
+    storagePath,
+    source: "cloud",
+    url: await signedPhotoUrl(storagePath),
+  };
+}
+
+async function loadCloudPhotos({ keepLocal = true } = {}) {
+  if (!cloud.ready) return;
+
+  cloud.loading = true;
+  updateSyncStatus("クラウドから写真を読み込んでいます。");
+  try {
+    const { data, error } = await cloud.client
+      .from(cloud.table)
+      .select("id,name,type,sort_time,width,height,storage_path")
+      .eq("album_id", cloud.albumId)
+      .order("sort_time", { ascending: true });
+
+    if (error) throw error;
+
+    const cloudPhotos = await Promise.all((data || []).map(async (row) => ({
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      date: row.sort_time,
+      width: row.width || 0,
+      height: row.height || 0,
+      storagePath: row.storage_path,
+      source: "cloud",
+      url: await signedPhotoUrl(row.storage_path),
+    })));
+
+    const cloudIds = new Set(cloudPhotos.map((photo) => photo.id));
+    const unsyncedLocal = keepLocal
+      ? localOnlyPhotos().filter((photo) => !cloudIds.has(photo.id))
+      : [];
+
+    revokePhotoUrls();
+    state.photos = [...cloudPhotos, ...unsyncedLocal];
+    state.currentIndex = 0;
+    state.activeCollection = "all";
+    render();
+    updateSyncStatus(unsyncedLocal.length ? `${cloudPhotos.length}枚を同期済み、${unsyncedLocal.length}枚はこの端末のみです。` : `${cloudPhotos.length}枚をクラウドから表示しています。`);
+  } catch (error) {
+    console.warn("クラウド写真の読み込みに失敗しました。", error);
+    cloud.error = "クラウド写真の読み込みに失敗しました。";
+    updateSyncStatus(cloud.error);
+  } finally {
+    cloud.loading = false;
+    updateSyncStatus();
+  }
+}
+
+async function syncLocalPhotosToCloud() {
+  if (!cloud.ready) return;
+
+  const photos = localOnlyPhotos();
+  if (!photos.length) {
+    updateSyncStatus();
+    return;
+  }
+
+  cloud.loading = true;
+  updateSyncStatus(`${photos.length}枚をクラウドへ同期しています。`);
+  let synced = 0;
+  try {
+    for (const photo of photos) {
+      const file = new File([photo.blob], photo.name, {
+        type: photo.type || photo.blob.type || "image/jpeg",
+        lastModified: photo.date || Date.now(),
+      });
+      await uploadPhotoToCloud(file, { width: photo.width, height: photo.height }, photo.id);
+      synced += 1;
+    }
+    await loadCloudPhotos({ keepLocal: false });
+    updateShareStatus(`${synced}枚をクラウドへ同期しました`);
+  } catch (error) {
+    console.warn("ローカル写真の同期に失敗しました。", error);
+    updateShareStatus("同期に失敗しました");
+  } finally {
+    cloud.loading = false;
+    updateSyncStatus();
+  }
+}
+
+async function deleteCloudPhotos() {
+  if (!cloud.ready) return;
+
+  const storagePaths = state.photos
+    .filter((photo) => photo.source === "cloud" && photo.storagePath)
+    .map((photo) => photo.storagePath);
+
+  if (storagePaths.length) {
+    const { error: storageError } = await cloud.client
+      .storage
+      .from(cloud.bucket)
+      .remove(storagePaths);
+    if (storageError) throw storageError;
+  }
+
+  const { error: dbError } = await cloud.client
+    .from(cloud.table)
+    .delete()
+    .eq("album_id", cloud.albumId);
+
+  if (dbError) throw dbError;
+}
+
 async function importFiles(fileList) {
   const files = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
   if (!files.length) return;
@@ -376,14 +634,27 @@ async function importFiles(fileList) {
   const firstImportedId = generatePhotoId();
   for (const [index, file] of files.entries()) {
     const dimensions = await getImageDimensions(file);
+    const photoId = index === 0 ? firstImportedId : generatePhotoId();
+
+    if (cloud.ready) {
+      try {
+        state.photos.push(await uploadPhotoToCloud(file, dimensions, photoId));
+        continue;
+      } catch (error) {
+        console.warn("クラウドへのアップロードに失敗しました。端末内に保存します。", error);
+        updateShareStatus("クラウド保存に失敗したため端末内に保存しました");
+      }
+    }
+
     const photo = {
-      id: index === 0 ? firstImportedId : generatePhotoId(),
+      id: photoId,
       name: file.name,
       type: file.type,
       date: file.lastModified || Date.now(),
       width: dimensions.width,
       height: dimensions.height,
       blob: file,
+      source: "local",
     };
     try {
       await savePhoto(photo);
@@ -397,6 +668,7 @@ async function importFiles(fileList) {
   state.currentIndex = Math.max(0, state.photos.findIndex((photo) => photo.id === firstImportedId));
   state.activeCollection = "all";
   render();
+  updateSyncStatus();
 }
 
 function updateShareStatus(message) {
@@ -415,17 +687,26 @@ function safeFileName(value) {
     .slice(0, 48) || "date-memory";
 }
 
+async function getPhotoBlob(photo) {
+  if (photo.blob) return photo.blob;
+  const url = createPhotoUrl(photo);
+  if (!url) throw new Error("Photo URL is missing");
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Photo download failed");
+  return response.blob();
+}
+
 async function exportAlbum() {
   if (!state.photos.length) return;
 
   const photos = await Promise.all(state.photos.map(async (photo) => ({
     id: photo.id,
     name: photo.name,
-    type: photo.type || photo.blob.type,
+    type: photo.type || photo.blob?.type,
     date: photo.date,
     width: photo.width,
     height: photo.height,
-    dataUrl: await blobToDataUrl(photo.blob),
+    dataUrl: await blobToDataUrl(await getPhotoBlob(photo)),
   })));
 
   const payload = {
@@ -470,6 +751,21 @@ async function importAlbumFile(file) {
       if (existingIds.has(id)) continue;
 
       const blob = dataUrlToBlob(item.dataUrl);
+      if (cloud.ready) {
+        const file = new File([blob], item.name || "memory-photo", {
+          type: item.type || blob.type || "image/jpeg",
+          lastModified: Number(item.date) || Date.now(),
+        });
+        state.photos.push(await uploadPhotoToCloud(file, {
+          width: Number(item.width) || 0,
+          height: Number(item.height) || 0,
+        }, id));
+        existingIds.add(id);
+        firstAddedId ||= id;
+        addedCount += 1;
+        continue;
+      }
+
       const photo = {
         id,
         name: item.name || "memory-photo",
@@ -478,6 +774,7 @@ async function importAlbumFile(file) {
         width: Number(item.width) || 0,
         height: Number(item.height) || 0,
         blob,
+        source: "local",
       };
 
       try {
@@ -506,13 +803,21 @@ async function importAlbumFile(file) {
 
 async function loadInitialPhotos() {
   try {
-    state.photos = await readAllPhotos();
+    state.photos = (await readAllPhotos()).map((photo) => ({
+      ...photo,
+      source: photo.source || "local",
+    }));
   } catch (error) {
     console.warn("保存済み写真の読み込みに失敗しました。", error);
     state.photos = [];
   }
   sortPhotos();
   render();
+  updateSyncStatus();
+
+  if (await setupCloudClient()) {
+    await loadCloudPhotos({ keepLocal: true });
+  }
 }
 
 function applyMood(mood) {
@@ -627,6 +932,8 @@ els.themeToggle.addEventListener("click", () => {
 
 els.exportBtn.addEventListener("click", exportAlbum);
 
+els.syncNowBtn.addEventListener("click", syncLocalPhotosToCloud);
+
 els.albumImportInput.addEventListener("change", (event) => {
   importAlbumFile(event.target.files[0]);
   event.target.value = "";
@@ -640,6 +947,16 @@ els.clearBtn.addEventListener("click", () => {
 
 els.confirmClear.addEventListener("click", async () => {
   pauseMemory();
+  if (cloud.ready) {
+    try {
+      await deleteCloudPhotos();
+    } catch (error) {
+      console.warn("クラウド写真の削除に失敗しました。", error);
+      updateShareStatus("クラウド写真の削除に失敗しました");
+      return;
+    }
+  }
+
   try {
     await clearPhotos();
   } catch (error) {
@@ -650,6 +967,7 @@ els.confirmClear.addEventListener("click", async () => {
   state.currentIndex = 0;
   state.activeCollection = "all";
   render();
+  updateSyncStatus("写真を削除しました。");
 });
 
 window.addEventListener("beforeunload", () => {
