@@ -586,6 +586,13 @@ body.theme-dark .play-button {
   font-weight: 750;
 }
 
+.sync-message {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
 .library {
   grid-area: library;
   padding: 18px;
