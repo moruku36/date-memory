@@ -22,6 +22,9 @@ const cloud = {
   ready: false,
   loading: false,
   error: "",
+  provider: CLOUD_CONFIG.provider || (CLOUD_CONFIG.apiBaseUrl ? "api" : "supabase"),
+  apiBaseUrl: (CLOUD_CONFIG.apiBaseUrl || "").replace(/\/$/, ""),
+  adminToken: CLOUD_CONFIG.adminToken || "",
   url: CLOUD_CONFIG.supabaseUrl || CLOUD_CONFIG.url || "",
   anonKey: CLOUD_CONFIG.supabaseAnonKey || CLOUD_CONFIG.anonKey || "",
   bucket: CLOUD_CONFIG.bucket || "date-memory",
@@ -119,6 +122,10 @@ function generatePhotoId() {
 }
 
 function isCloudConfigured() {
+  if (cloud.provider === "api") {
+    return CLOUD_CONFIG.enabled !== false;
+  }
+
   return Boolean(
     CLOUD_CONFIG.enabled !== false
       && cloud.url
@@ -141,7 +148,7 @@ function updateSyncStatus(message) {
 
   if (!isCloudConfigured()) {
     els.syncBadge.textContent = "この端末のみ";
-    els.syncMessage.textContent = message || "クラウド未設定です。Supabaseを設定すると、PCとスマホで同じ写真を見られます。";
+    els.syncMessage.textContent = message || "クラウド未設定です。MongoDB APIを設定すると、PCとスマホで同じ写真を見られます。";
     els.syncNowBtn.disabled = true;
     return;
   }
@@ -434,6 +441,57 @@ function getImageDimensions(file) {
   });
 }
 
+function apiUrl(path, params = {}) {
+  const query = new URLSearchParams({
+    albumId: cloud.albumId,
+    ...params,
+  });
+  return `${cloud.apiBaseUrl}${path}?${query.toString()}`;
+}
+
+async function optimizeImageForApi(file) {
+  const originalDimensions = await getImageDimensions(file);
+  if (!originalDimensions.width || !originalDimensions.height || file.size <= 1.8 * 1024 * 1024) {
+    return { file, dimensions: originalDimensions };
+  }
+
+  const maxEdge = 1800;
+  const scale = Math.min(1, maxEdge / Math.max(originalDimensions.width, originalDimensions.height));
+  const width = Math.round(originalDimensions.width * scale);
+  const height = Math.round(originalDimensions.height * scale);
+
+  const image = new Image();
+  const url = URL.createObjectURL(file);
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = reject;
+    image.src = url;
+  });
+  URL.revokeObjectURL(url);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0, width, height);
+
+  const blob = await new Promise((resolve) => {
+    canvas.toBlob(resolve, "image/jpeg", 0.82);
+  });
+
+  if (!blob) return { file, dimensions: originalDimensions };
+
+  const optimizedFile = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), {
+    type: "image/jpeg",
+    lastModified: file.lastModified || Date.now(),
+  });
+
+  return {
+    file: optimizedFile,
+    dimensions: { width, height },
+  };
+}
+
 async function setupCloudClient() {
   if (!isCloudConfigured()) {
     updateSyncStatus();
@@ -445,15 +503,21 @@ async function setupCloudClient() {
   cloud.loading = true;
   updateSyncStatus();
   try {
+    if (cloud.provider === "api") {
+      cloud.ready = true;
+      cloud.error = "";
+      return true;
+    }
+
     const { createClient } = await import(SUPABASE_MODULE_URL);
     cloud.client = createClient(cloud.url, cloud.anonKey);
     cloud.ready = true;
     cloud.error = "";
     return true;
   } catch (error) {
-    console.warn("Supabaseへの接続に失敗しました。", error);
+    console.warn("クラウドへの接続に失敗しました。", error);
     cloud.ready = false;
-    cloud.error = "Supabaseへの接続に失敗しました。";
+    cloud.error = "クラウドへの接続に失敗しました。";
     return false;
   } finally {
     cloud.loading = false;
@@ -477,6 +541,38 @@ async function signedPhotoUrl(storagePath) {
 }
 
 async function uploadPhotoToCloud(file, dimensions, photoId = generatePhotoId()) {
+  if (cloud.provider === "api") {
+    const { file: uploadFile, dimensions: uploadDimensions } = await optimizeImageForApi(file);
+    const dataUrl = await blobToDataUrl(uploadFile);
+    const response = await fetch(apiUrl("/api/photos"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: photoId,
+        albumId: cloud.albumId,
+        name: uploadFile.name,
+        type: uploadFile.type,
+        date: uploadFile.lastModified || file.lastModified || Date.now(),
+        width: uploadDimensions.width || dimensions.width,
+        height: uploadDimensions.height || dimensions.height,
+        dataUrl,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return {
+      ...result.photo,
+      source: "cloud",
+      url: apiUrl(`/api/photos/${encodeURIComponent(result.photo.id)}`),
+    };
+  }
+
   const storagePath = cloudStoragePath(photoId, file.name);
   const sortTime = file.lastModified || Date.now();
 
@@ -530,6 +626,29 @@ async function loadCloudPhotos({ keepLocal = true } = {}) {
   cloud.loading = true;
   updateSyncStatus("クラウドから写真を読み込んでいます。");
   try {
+    if (cloud.provider === "api") {
+      const response = await fetch(apiUrl("/api/photos"));
+      if (!response.ok) throw new Error(`Load failed: ${response.status}`);
+      const result = await response.json();
+      const cloudPhotos = (result.photos || []).map((photo) => ({
+        ...photo,
+        source: "cloud",
+        url: apiUrl(`/api/photos/${encodeURIComponent(photo.id)}`),
+      }));
+      const cloudIds = new Set(cloudPhotos.map((photo) => photo.id));
+      const unsyncedLocal = keepLocal
+        ? localOnlyPhotos().filter((photo) => !cloudIds.has(photo.id))
+        : [];
+
+      revokePhotoUrls();
+      state.photos = [...cloudPhotos, ...unsyncedLocal];
+      state.currentIndex = 0;
+      state.activeCollection = "all";
+      render();
+      updateSyncStatus(unsyncedLocal.length ? `${cloudPhotos.length}枚を同期済み、${unsyncedLocal.length}枚はこの端末のみです。` : `${cloudPhotos.length}枚をクラウドから表示しています。`);
+      return;
+    }
+
     const { data, error } = await cloud.client
       .from(cloud.table)
       .select("id,name,type,sort_time,width,height,storage_path")
@@ -605,6 +724,15 @@ async function syncLocalPhotosToCloud() {
 
 async function deleteCloudPhotos() {
   if (!cloud.ready) return;
+
+  if (cloud.provider === "api") {
+    const response = await fetch(apiUrl("/api/photos"), {
+      method: "DELETE",
+      headers: cloud.adminToken ? { "X-Admin-Token": cloud.adminToken } : {},
+    });
+    if (!response.ok) throw new Error(`Delete failed: ${response.status}`);
+    return;
+  }
 
   const storagePaths = state.photos
     .filter((photo) => photo.source === "cloud" && photo.storagePath)
