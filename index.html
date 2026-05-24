@@ -120,6 +120,20 @@
 
           <div class="panel-section">
             <div class="section-head">
+              <h2>同期</h2>
+              <span id="syncBadge">この端末のみ</span>
+            </div>
+            <p class="sync-message" id="syncMessage">クラウド未設定です。</p>
+            <button class="button quiet" id="syncNowBtn" type="button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 3v12M8 11l4 4 4-4M4 17a5 5 0 0 0 4 2h8a5 5 0 0 0 4-5"></path>
+              </svg>
+              この端末の写真を同期
+            </button>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-head">
               <h2>共有</h2>
             </div>
             <div class="share-actions">
@@ -177,7 +191,7 @@
       <dialog class="confirm-dialog" id="confirmDialog" aria-labelledby="confirmTitle">
         <form method="dialog">
           <h2 id="confirmTitle">写真をすべて削除しますか</h2>
-          <p>このブラウザに保存した写真だけを削除します。</p>
+          <p>クラウド同期中の場合は、共有アルバム上の写真も削除します。</p>
           <div class="dialog-actions">
             <button class="button quiet" value="cancel" type="submit">キャンセル</button>
             <button class="button danger" id="confirmClear" value="clear" type="submit">削除</button>
@@ -186,6 +200,7 @@
       </dialog>
     </div>
 
+    <script src="config.js"></script>
     <script src="script.js"></script>
   </body>
 </html>
