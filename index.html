@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>デートのメモリー</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar" aria-label="アルバム操作">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <p class="kicker">Private Album</p>
+            <h1>デートのメモリー</h1>
+          </div>
+        </div>
+
+        <div class="top-actions">
+          <label class="button primary" for="photoInput">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M12 5v14M5 12h14"></path>
+            </svg>
+            写真を選ぶ
+          </label>
+          <input id="photoInput" type="file" accept="image/*" multiple>
+          <button class="icon-button" id="themeToggle" type="button" aria-label="テーマ切替" title="テーマ切替">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M12 3a9 9 0 1 0 9 9 6.5 6.5 0 0 1-9-9Z"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="memory-stage" aria-label="メモリー再生">
+          <div class="stage-bg" id="stageBg"></div>
+          <div class="stage-sheen" aria-hidden="true"></div>
+
+          <div class="empty-panel" id="emptyPanel">
+            <div class="empty-collage" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <h2>写真を重ねると、思い出が動き出します。</h2>
+            <label class="button primary large" for="photoInput">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 5v14M5 12h14"></path>
+              </svg>
+              写真を選ぶ
+            </label>
+          </div>
+
+          <article class="hero-photo" id="heroPhoto" hidden>
+            <img id="currentPhoto" alt="">
+            <div class="photo-caption">
+              <p id="memoryDate">Memory</p>
+              <h2 id="memoryTitle">デートのメモリー</h2>
+              <span id="memoryCounter">1 / 1</span>
+            </div>
+          </article>
+
+          <div class="stage-controls" id="stageControls" hidden>
+            <button class="icon-button glass" id="prevBtn" type="button" aria-label="前の写真" title="前の写真">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="m15 18-6-6 6-6"></path>
+              </svg>
+            </button>
+            <button class="play-button" id="playBtn" type="button" aria-label="再生" title="再生">
+              <svg class="play-icon" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7Z"></path>
+              </svg>
+              <svg class="pause-icon" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M8 5v14M16 5v14"></path>
+              </svg>
+            </button>
+            <button class="icon-button glass" id="nextBtn" type="button" aria-label="次の写真" title="次の写真">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="m9 18 6-6-6-6"></path>
+              </svg>
+            </button>
+          </div>
+        </section>
+
+        <aside class="side-panel" aria-label="コレクション">
+          <div class="panel-section compact">
+            <label class="field-label" for="albumName">メモリー名</label>
+            <input id="albumName" class="text-field" type="text" value="デートのメモリー">
+          </div>
+
+          <div class="panel-section">
+            <div class="section-head">
+              <h2>コレクション</h2>
+              <span id="photoCount">0枚</span>
+            </div>
+            <div class="collection-list" id="collectionList"></div>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-head">
+              <h2>ムード</h2>
+            </div>
+            <div class="segmented" role="group" aria-label="ムード">
+              <button class="segment active" data-mood="cinema" type="button">Cinema</button>
+              <button class="segment" data-mood="day" type="button">Day</button>
+              <button class="segment" data-mood="night" type="button">Night</button>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <div class="section-head">
+              <h2>再生速度</h2>
+              <span id="speedValue">4秒</span>
+            </div>
+            <input id="speedRange" class="range" type="range" min="2" max="8" step="1" value="4" aria-label="再生速度">
+          </div>
+
+          <div class="panel-section">
+            <div class="section-head">
+              <h2>共有</h2>
+            </div>
+            <div class="share-actions">
+              <button class="button quiet" id="exportBtn" type="button" disabled>
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M12 3v12M8 11l4 4 4-4M5 21h14"></path>
+                </svg>
+                書き出し
+              </button>
+              <label class="button quiet" for="albumImportInput">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M12 21V9M8 13l4-4 4 4M5 3h14"></path>
+                </svg>
+                読み込み
+              </label>
+              <input id="albumImportInput" type="file" accept="application/json,.json">
+            </div>
+            <p class="share-status" id="shareStatus" role="status" aria-live="polite"></p>
+          </div>
+
+          <button class="button quiet" id="clearBtn" type="button" disabled>
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"></path>
+            </svg>
+            すべて削除
+          </button>
+        </aside>
+
+        <section class="library" aria-label="写真一覧">
+          <div class="library-head">
+            <div>
+              <p class="kicker">Gallery</p>
+              <h2>写真一覧</h2>
+            </div>
+            <div class="view-toggle" role="group" aria-label="表示切替">
+              <button class="icon-button active" data-view="mosaic" type="button" aria-label="モザイク表示" title="モザイク表示">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M4 4h7v7H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 13h7v7H4z"></path>
+                </svg>
+              </button>
+              <button class="icon-button" data-view="strip" type="button" aria-label="フィルム表示" title="フィルム表示">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M4 7h16v10H4zM8 7v10M16 7v10"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="drop-zone" id="dropZone">
+            <div class="thumb-grid mosaic" id="thumbGrid"></div>
+          </div>
+        </section>
+      </main>
+
+      <dialog class="confirm-dialog" id="confirmDialog" aria-labelledby="confirmTitle">
+        <form method="dialog">
+          <h2 id="confirmTitle">写真をすべて削除しますか</h2>
+          <p>このブラウザに保存した写真だけを削除します。</p>
+          <div class="dialog-actions">
+            <button class="button quiet" value="cancel" type="submit">キャンセル</button>
+            <button class="button danger" id="confirmClear" value="clear" type="submit">削除</button>
+          </div>
+        </form>
+      </dialog>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
