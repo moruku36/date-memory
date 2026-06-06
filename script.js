@@ -5,6 +5,14 @@ const PREFERENCES_KEY = "couple-memory-preferences";
 const DEFAULT_ALBUM_NAME = "デートのメモリー";
 const SUPABASE_MODULE_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 const CLOUD_CONFIG = window.DATE_MEMORY_CLOUD || {};
+const API_OPTIMIZE_THRESHOLD_BYTES = 1.8 * 1024 * 1024;
+const API_MAX_IMAGE_EDGE = 1800;
+const API_WEB_FRIENDLY_IMAGE_TYPES = new Set([
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 const state = {
   photos: [],
@@ -15,6 +23,8 @@ const state = {
   speed: 4000,
   view: "mosaic",
   mood: "cinema",
+  selectionMode: false,
+  selectedIds: new Set(),
 };
 
 const cloud = {
@@ -52,6 +62,11 @@ const els = {
   speedRange: document.getElementById("speedRange"),
   speedValue: document.getElementById("speedValue"),
   thumbGrid: document.getElementById("thumbGrid"),
+  selectionActions: document.getElementById("selectionActions"),
+  selectionCount: document.getElementById("selectionCount"),
+  selectModeBtn: document.getElementById("selectModeBtn"),
+  selectModeLabel: document.getElementById("selectModeLabel"),
+  deleteSelectedBtn: document.getElementById("deleteSelectedBtn"),
   albumImportInput: document.getElementById("albumImportInput"),
   exportBtn: document.getElementById("exportBtn"),
   shareStatus: document.getElementById("shareStatus"),
@@ -116,6 +131,13 @@ function clearPhotos() {
   return withStore("readwrite", (store) => store.clear());
 }
 
+function deleteLocalPhotos(photoIds) {
+  if (!photoIds.length) return Promise.resolve();
+  return withStore("readwrite", (store) => {
+    photoIds.forEach((photoId) => store.delete(photoId));
+  });
+}
+
 function generatePhotoId() {
   const unique = crypto.randomUUID?.() || Math.random().toString(36).slice(2);
   return `${Date.now()}-${unique}`;
@@ -141,6 +163,37 @@ function cloudPhotoCount() {
 
 function localOnlyPhotos() {
   return state.photos.filter((photo) => photo.blob && photo.source !== "cloud");
+}
+
+function hasCloudPhotos() {
+  return state.photos.some((photo) => photo.source === "cloud");
+}
+
+function canDeleteEntireCloudAlbum() {
+  return cloud.provider !== "api" || Boolean(cloud.adminToken);
+}
+
+function selectedPhotos() {
+  return state.photos.filter((photo) => state.selectedIds.has(photo.id));
+}
+
+function pruneSelection() {
+  const existingIds = new Set(state.photos.map((photo) => photo.id));
+  state.selectedIds.forEach((photoId) => {
+    if (!existingIds.has(photoId)) state.selectedIds.delete(photoId);
+  });
+  if (!state.photos.length) state.selectionMode = false;
+}
+
+function updateSelectionControls() {
+  const selectedCount = state.selectedIds.size;
+  els.selectModeBtn.disabled = !state.photos.length;
+  els.selectModeBtn.classList.toggle("active", state.selectionMode);
+  els.selectModeBtn.setAttribute("aria-pressed", state.selectionMode ? "true" : "false");
+  els.selectModeLabel.textContent = state.selectionMode ? "完了" : "選択";
+  els.selectionActions.hidden = !state.selectionMode;
+  els.selectionCount.textContent = `${selectedCount}枚選択中`;
+  els.deleteSelectedBtn.disabled = selectedCount === 0 || cloud.loading;
 }
 
 function updateSyncStatus(message) {
@@ -351,10 +404,23 @@ function renderThumbs() {
     button.className = "thumb";
     button.type = "button";
     button.dataset.id = photo.id;
+    const selected = state.selectedIds.has(photo.id);
+    button.setAttribute("aria-label", state.selectionMode
+      ? `${photo.name}${selected ? "の選択を解除" : "を選択"}`
+      : `${photo.name}を表示`);
 
     if (state.view === "mosaic") {
       if (index % 9 === 0) button.classList.add("wide");
       if (index % 7 === 3) button.classList.add("tall");
+    }
+
+    if (state.selectionMode) {
+      button.classList.add("selectable");
+      button.setAttribute("aria-pressed", selected ? "true" : "false");
+    }
+
+    if (selected) {
+      button.classList.add("selected");
     }
 
     if (globalIndex === state.currentIndex) {
@@ -367,10 +433,28 @@ function renderThumbs() {
 
     const meta = document.createElement("span");
     meta.className = "thumb-meta";
-    meta.innerHTML = `<span>${index + 1}</span><span>${formatDate(photo.date).replace("年", ".").replace("月", ".").replace("日", "")}</span>`;
+    const order = document.createElement("span");
+    const date = document.createElement("span");
+    order.textContent = String(index + 1);
+    date.textContent = formatDate(photo.date).replace("年", ".").replace("月", ".").replace("日", "");
+    meta.append(order, date);
 
-    button.append(img, meta);
+    const check = document.createElement("span");
+    check.className = "thumb-check";
+    check.setAttribute("aria-hidden", "true");
+
+    button.append(img, check, meta);
     button.addEventListener("click", () => {
+      if (state.selectionMode) {
+        if (selected) {
+          state.selectedIds.delete(photo.id);
+        } else {
+          state.selectedIds.add(photo.id);
+        }
+        render();
+        return;
+      }
+
       state.currentIndex = globalIndex;
       pauseMemory();
       render();
@@ -382,6 +466,7 @@ function renderThumbs() {
 function render() {
   const current = state.photos[state.currentIndex];
   sortPhotos();
+  pruneSelection();
   if (current) {
     const nextIndex = state.photos.findIndex((photo) => photo.id === current.id);
     if (nextIndex >= 0) state.currentIndex = nextIndex;
@@ -392,6 +477,7 @@ function render() {
   renderCollections();
   renderThumbs();
   els.playBtn.classList.toggle("is-playing", state.isPlaying);
+  updateSelectionControls();
   updateSyncStatus();
 }
 
@@ -441,6 +527,10 @@ function getImageDimensions(file) {
   });
 }
 
+function isSupportedImageFile(file) {
+  return file.type.startsWith("image/") && file.type.toLowerCase() !== "image/svg+xml";
+}
+
 function apiUrl(path, params = {}) {
   const query = new URLSearchParams({
     albumId: cloud.albumId,
@@ -451,12 +541,15 @@ function apiUrl(path, params = {}) {
 
 async function optimizeImageForApi(file) {
   const originalDimensions = await getImageDimensions(file);
-  if (!originalDimensions.width || !originalDimensions.height || file.size <= 1.8 * 1024 * 1024) {
+  const needsResize = file.size > API_OPTIMIZE_THRESHOLD_BYTES;
+  const needsFormatConversion = !API_WEB_FRIENDLY_IMAGE_TYPES.has(file.type.toLowerCase());
+  if (!originalDimensions.width || !originalDimensions.height || (!needsResize && !needsFormatConversion)) {
     return { file, dimensions: originalDimensions };
   }
 
-  const maxEdge = 1800;
-  const scale = Math.min(1, maxEdge / Math.max(originalDimensions.width, originalDimensions.height));
+  const scale = needsResize
+    ? Math.min(1, API_MAX_IMAGE_EDGE / Math.max(originalDimensions.width, originalDimensions.height))
+    : 1;
   const width = Math.round(originalDimensions.width * scale);
   const height = Math.round(originalDimensions.height * scale);
 
@@ -726,6 +819,10 @@ async function deleteCloudPhotos() {
   if (!cloud.ready) return;
 
   if (cloud.provider === "api") {
+    if (!cloud.adminToken) {
+      throw new Error("Cloud delete requires an admin token");
+    }
+
     const response = await fetch(apiUrl("/api/photos"), {
       method: "DELETE",
       headers: cloud.adminToken ? { "X-Admin-Token": cloud.adminToken } : {},
@@ -754,8 +851,82 @@ async function deleteCloudPhotos() {
   if (dbError) throw dbError;
 }
 
+async function deleteCloudPhoto(photo) {
+  if (!cloud.ready || photo.source !== "cloud") return;
+
+  if (cloud.provider === "api") {
+    const response = await fetch(apiUrl(`/api/photos/${encodeURIComponent(photo.id)}`), {
+      method: "DELETE",
+      headers: cloud.adminToken ? { "X-Admin-Token": cloud.adminToken } : {},
+    });
+
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`Delete failed: ${response.status}`);
+    }
+    return;
+  }
+
+  if (photo.storagePath) {
+    const { error: storageError } = await cloud.client
+      .storage
+      .from(cloud.bucket)
+      .remove([photo.storagePath]);
+    if (storageError) throw storageError;
+  }
+
+  const { error: dbError } = await cloud.client
+    .from(cloud.table)
+    .delete()
+    .eq("album_id", cloud.albumId)
+    .eq("id", photo.id);
+
+  if (dbError) throw dbError;
+}
+
+async function deleteSelectedPhotos() {
+  const photos = selectedPhotos();
+  if (!photos.length) return;
+
+  const message = `${photos.length}枚の写真を削除しますか？`;
+  if (!window.confirm(message)) return;
+
+  pauseMemory();
+  cloud.loading = photos.some((photo) => photo.source === "cloud");
+  updateSelectionControls();
+  updateSyncStatus(`${photos.length}枚を削除しています。`);
+
+  const photoIds = new Set(photos.map((photo) => photo.id));
+  try {
+    for (const photo of photos) {
+      await deleteCloudPhoto(photo);
+    }
+
+    await deleteLocalPhotos(photos.filter((photo) => photo.blob).map((photo) => photo.id));
+    photos.forEach((photo) => {
+      if (photo.url) URL.revokeObjectURL(photo.url);
+    });
+
+    state.photos = state.photos.filter((photo) => !photoIds.has(photo.id));
+    state.selectedIds.clear();
+    state.selectionMode = false;
+    state.currentIndex = Math.min(state.currentIndex, Math.max(0, state.photos.length - 1));
+    if (state.activeCollection !== "all" && !visiblePhotos().length) {
+      state.activeCollection = "all";
+    }
+    render();
+    updateShareStatus(`${photos.length}枚を削除しました`);
+  } catch (error) {
+    console.warn("選択した写真の削除に失敗しました。", error);
+    updateShareStatus("写真の削除に失敗しました");
+  } finally {
+    cloud.loading = false;
+    updateSyncStatus();
+    updateSelectionControls();
+  }
+}
+
 async function importFiles(fileList) {
-  const files = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
+  const files = Array.from(fileList).filter(isSupportedImageFile);
   if (!files.length) return;
 
   pauseMemory();
@@ -1062,12 +1233,26 @@ els.exportBtn.addEventListener("click", exportAlbum);
 
 els.syncNowBtn.addEventListener("click", syncLocalPhotosToCloud);
 
+els.selectModeBtn.addEventListener("click", () => {
+  state.selectionMode = !state.selectionMode;
+  if (!state.selectionMode) state.selectedIds.clear();
+  pauseMemory();
+  render();
+});
+
+els.deleteSelectedBtn.addEventListener("click", deleteSelectedPhotos);
+
 els.albumImportInput.addEventListener("change", (event) => {
   importAlbumFile(event.target.files[0]);
   event.target.value = "";
 });
 
 els.clearBtn.addEventListener("click", () => {
+  if (cloud.ready && hasCloudPhotos() && !canDeleteEntireCloudAlbum()) {
+    updateShareStatus("共有アルバムの削除には管理者設定が必要です");
+    return;
+  }
+
   if (typeof els.confirmDialog.showModal === "function") {
     els.confirmDialog.showModal();
   }
