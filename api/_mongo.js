@@ -1,6 +1,14 @@
 const { MongoClient } = require("mongodb");
 
 let cachedClient;
+const SUPPORTED_IMAGE_TYPES = new Set([
+  "image/gif",
+  "image/heic",
+  "image/heif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 async function getDatabase() {
   const uri = process.env.MONGODB_URI;
@@ -77,10 +85,20 @@ function dataUrlToBuffer(dataUrl) {
     throw new Error("Invalid image payload");
   }
 
+  const contentType = match[1].toLowerCase();
+  if (!SUPPORTED_IMAGE_TYPES.has(contentType)) {
+    throw new Error("Unsupported image type");
+  }
+
   return {
-    contentType: match[1],
+    contentType,
     buffer: Buffer.from(match[2], "base64"),
   };
+}
+
+function safeImageContentType(value) {
+  const contentType = String(value || "").toLowerCase();
+  return SUPPORTED_IMAGE_TYPES.has(contentType) ? contentType : "image/jpeg";
 }
 
 function publicPhoto(doc) {
@@ -102,5 +120,6 @@ module.exports = {
   getDatabase,
   publicPhoto,
   readJson,
+  safeImageContentType,
   setCorsHeaders,
 };
