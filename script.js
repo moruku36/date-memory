@@ -300,32 +300,33 @@ function updateSelectionControls() {
 }
 
 function updateSyncStatus(message) {
+  if (!els.syncBadge && !els.syncMessage && !els.syncNowBtn) return;
   const localCount = localOnlyPhotos().length;
 
   if (!isCloudConfigured()) {
-    els.syncBadge.textContent = "この端末のみ";
-    els.syncMessage.textContent = message || "クラウド未設定です。MongoDB APIを設定すると、PCとスマホで同じ写真を見られます。";
-    els.syncNowBtn.disabled = true;
+    if (els.syncBadge) els.syncBadge.textContent = "この端末のみ";
+    if (els.syncMessage) els.syncMessage.textContent = message || "クラウド未設定です。MongoDB APIを設定すると、PCとスマホで同じ写真を見られます。";
+    if (els.syncNowBtn) els.syncNowBtn.disabled = true;
     return;
   }
 
   if (cloud.loading) {
-    els.syncBadge.textContent = "同期中";
-    els.syncMessage.textContent = message || "クラウドと同期しています。";
-    els.syncNowBtn.disabled = true;
+    if (els.syncBadge) els.syncBadge.textContent = "同期中";
+    if (els.syncMessage) els.syncMessage.textContent = message || "クラウドと同期しています。";
+    if (els.syncNowBtn) els.syncNowBtn.disabled = true;
     return;
   }
 
   if (!cloud.ready) {
-    els.syncBadge.textContent = "未接続";
-    els.syncMessage.textContent = message || cloud.error || "クラウドに接続できませんでした。";
-    els.syncNowBtn.disabled = true;
+    if (els.syncBadge) els.syncBadge.textContent = "未接続";
+    if (els.syncMessage) els.syncMessage.textContent = message || cloud.error || "クラウドに接続できませんでした。";
+    if (els.syncNowBtn) els.syncNowBtn.disabled = true;
     return;
   }
 
-  els.syncBadge.textContent = "クラウド同期";
-  els.syncMessage.textContent = message || `${cloudPhotoCount()}枚をクラウドから表示しています。`;
-  els.syncNowBtn.disabled = localCount === 0;
+  if (els.syncBadge) els.syncBadge.textContent = "クラウド同期";
+  if (els.syncMessage) els.syncMessage.textContent = message || `${cloudPhotoCount()}枚をクラウドから表示しています。`;
+  if (els.syncNowBtn) els.syncNowBtn.disabled = localCount === 0;
 }
 
 function formatDate(timestamp) {
@@ -482,7 +483,7 @@ function renderHero() {
   els.emptyPanel.hidden = hasPhotos;
   els.heroPhoto.hidden = !hasPhotos;
   els.stageControls.hidden = !hasPhotos;
-  els.clearBtn.disabled = !hasPhotos;
+  if (els.clearBtn) els.clearBtn.disabled = !hasPhotos;
   els.exportBtn.disabled = !hasPhotos;
 
   if (!hasPhotos) {
@@ -1410,7 +1411,7 @@ els.themeToggle.addEventListener("click", () => {
 
 els.exportBtn.addEventListener("click", exportAlbum);
 
-els.syncNowBtn.addEventListener("click", syncLocalPhotosToCloud);
+els.syncNowBtn?.addEventListener("click", syncLocalPhotosToCloud);
 
 els.selectModeBtn.addEventListener("click", () => {
   state.selectionMode = !state.selectionMode;
@@ -1426,18 +1427,18 @@ els.albumImportInput.addEventListener("change", (event) => {
   event.target.value = "";
 });
 
-els.clearBtn.addEventListener("click", () => {
+els.clearBtn?.addEventListener("click", () => {
   if (cloud.ready && hasCloudPhotos() && !canDeleteEntireCloudAlbum()) {
     updateShareStatus("共有アルバムの削除には管理者設定が必要です");
     return;
   }
 
-  if (typeof els.confirmDialog.showModal === "function") {
+  if (els.confirmDialog && typeof els.confirmDialog.showModal === "function") {
     els.confirmDialog.showModal();
   }
 });
 
-els.confirmClear.addEventListener("click", async () => {
+els.confirmClear?.addEventListener("click", async () => {
   pauseMemory();
   if (cloud.ready) {
     try {
