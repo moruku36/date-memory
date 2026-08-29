@@ -1,0 +1,17 @@
+{
+  "name": "デートのメモリー",
+  "short_name": "メモリー",
+  "description": "2人だけの大切な思い出アルバム",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#ff758c",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

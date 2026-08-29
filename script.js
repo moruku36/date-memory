@@ -53,6 +53,7 @@ const els = {
   heroPhoto: document.getElementById("heroPhoto"),
   currentPhoto: document.getElementById("currentPhoto"),
   stageBg: document.getElementById("stageBg"),
+  memoryStage: document.getElementById("memoryStage"),
   memoryDate: document.getElementById("memoryDate"),
   memoryTitle: document.getElementById("memoryTitle"),
   memoryCounter: document.getElementById("memoryCounter"),
@@ -73,6 +74,7 @@ const els = {
   deleteSelectedBtn: document.getElementById("deleteSelectedBtn"),
   albumImportInput: document.getElementById("albumImportInput"),
   exportBtn: document.getElementById("exportBtn"),
+  zipExportBtn: document.getElementById("zipExportBtn"),
   shareStatus: document.getElementById("shareStatus"),
   syncBadge: document.getElementById("syncBadge"),
   syncMessage: document.getElementById("syncMessage"),
@@ -81,6 +83,23 @@ const els = {
   confirmDialog: document.getElementById("confirmDialog"),
   confirmClear: document.getElementById("confirmClear"),
   themeToggle: document.getElementById("themeToggle"),
+  bgmToggle: document.getElementById("bgmToggle"),
+  fullscreenToggle: document.getElementById("fullscreenToggle"),
+  onThisDayBanner: document.getElementById("onThisDayBanner"),
+  onThisDaySubtitle: document.getElementById("onThisDaySubtitle"),
+  playOnThisDayBtn: document.getElementById("playOnThisDayBtn"),
+  favoriteBtn: document.getElementById("favoriteBtn"),
+  zoomBtn: document.getElementById("zoomBtn"),
+  photoMemoContainer: document.getElementById("photoMemoContainer"),
+  photoMemoText: document.getElementById("photoMemoText"),
+  photoMemoInput: document.getElementById("photoMemoInput"),
+  uploadProgressModal: document.getElementById("uploadProgressModal"),
+  progressTitle: document.getElementById("progressTitle"),
+  progressSubtitle: document.getElementById("progressSubtitle"),
+  progressBarFill: document.getElementById("progressBarFill"),
+  lightboxModal: document.getElementById("lightboxModal"),
+  lightboxImg: document.getElementById("lightboxImg"),
+  lightboxCloseBtn: document.getElementById("lightboxCloseBtn"),
 };
 
 function openDatabase() {
@@ -401,8 +420,26 @@ function revokePhotoUrls() {
   });
 }
 
+function getOnThisDayPhotos() {
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentDate = now.getDate();
+  const currentYear = now.getFullYear();
+
+  return state.photos.filter((photo) => {
+    const d = new Date(photo.date);
+    return d.getMonth() === currentMonth && d.getDate() === currentDate && d.getFullYear() < currentYear;
+  });
+}
+
 function visiblePhotos() {
   if (state.activeCollection === "all") return state.photos;
+  if (state.activeCollection === "favorites") {
+    return state.photos.filter((p) => p.favorite);
+  }
+  if (state.activeCollection === "on_this_day") {
+    return getOnThisDayPhotos();
+  }
   return state.photos.filter((photo) => formatMonth(photo.date) === state.activeCollection);
 }
 
@@ -422,6 +459,30 @@ function setCurrentByVisibleIndex(index) {
 }
 
 function buildCollections() {
+  const collections = [
+    { id: "all", label: "すべての写真", count: state.photos.length, cover: state.photos[0] },
+  ];
+
+  const favPhotos = state.photos.filter((p) => p.favorite);
+  if (favPhotos.length > 0) {
+    collections.push({
+      id: "favorites",
+      label: "❤️ お気に入り",
+      count: favPhotos.length,
+      cover: favPhotos[0],
+    });
+  }
+
+  const onThisDayPhotos = getOnThisDayPhotos();
+  if (onThisDayPhotos.length > 0) {
+    collections.push({
+      id: "on_this_day",
+      label: "✨ 過去の今日の思い出",
+      count: onThisDayPhotos.length,
+      cover: onThisDayPhotos[0],
+    });
+  }
+
   const groups = new Map();
   state.photos.forEach((photo) => {
     const month = formatMonth(photo.date);
@@ -429,15 +490,16 @@ function buildCollections() {
     groups.get(month).push(photo);
   });
 
-  return [
-    { id: "all", label: "すべての写真", count: state.photos.length, cover: state.photos[0] },
-    ...Array.from(groups, ([id, photos]) => ({
+  Array.from(groups, ([id, photos]) => {
+    collections.push({
       id,
       label: id,
       count: photos.length,
       cover: photos[0],
-    })),
-  ];
+    });
+  });
+
+  return collections;
 }
 
 function renderCollections() {
@@ -506,6 +568,32 @@ function renderHero() {
   els.memoryCounter.textContent = `${currentVisibleIndex() + 1} / ${photos.length}`;
   els.photoCount.textContent = `${state.photos.length}枚`;
 
+  // お気に入り状態
+  if (els.favoriteBtn) {
+    els.favoriteBtn.classList.toggle("is-favorite", Boolean(current.favorite));
+  }
+  // メモ状態
+  if (els.photoMemoText) {
+    els.photoMemoText.textContent = current.memo ? `💬 ${current.memo}` : "💬 メモを追加...";
+    els.photoMemoText.hidden = false;
+  }
+  if (els.photoMemoInput) {
+    els.photoMemoInput.value = current.memo || "";
+    els.photoMemoInput.hidden = true;
+  }
+  if (els.zipExportBtn) {
+    els.zipExportBtn.disabled = !hasPhotos;
+  }
+
+  // 過去の今日バナー更新
+  const onThisDay = getOnThisDayPhotos();
+  if (els.onThisDayBanner) {
+    els.onThisDayBanner.hidden = onThisDay.length === 0;
+    if (onThisDay.length > 0 && els.onThisDaySubtitle) {
+      els.onThisDaySubtitle.textContent = `過去の今日撮影された写真が ${onThisDay.length} 枚あります`;
+    }
+  }
+
   els.heroPhoto.classList.remove("portrait", "landscape");
   if (current.width && current.height) {
     els.heroPhoto.classList.add(current.height > current.width ? "portrait" : "landscape");
@@ -556,6 +644,13 @@ function renderThumbs() {
     img.decoding = "async";
     img.src = createThumbnailUrl(photo);
     img.alt = photo.name;
+
+    if (photo.favorite) {
+      const favBadge = document.createElement("span");
+      favBadge.className = "thumb-fav-badge";
+      favBadge.textContent = "❤️";
+      button.append(favBadge);
+    }
 
     const meta = document.createElement("span");
     meta.className = "thumb-meta";
@@ -1087,19 +1182,101 @@ async function deleteSelectedPhotos() {
   }
 }
 
+async function convertHeicIfNeeded(file) {
+  const isHeic = file.name.match(/\.(heic|heif)$/i) || file.type.includes("heic") || file.type.includes("heif");
+  if (isHeic && typeof window.heic2any === "function") {
+    try {
+      const convertedBlob = await window.heic2any({
+        blob: file,
+        toType: "image/jpeg",
+        quality: 0.85,
+      });
+      const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+      return new File([blob], file.name.replace(/\.(heic|heif)$/i, ".jpg"), {
+        type: "image/jpeg",
+        lastModified: file.lastModified,
+      });
+    } catch (e) {
+      console.warn("HEIC conversion failed:", e);
+    }
+  }
+  return file;
+}
+
+async function extractExifDate(file) {
+  try {
+    const buffer = await file.slice(0, 128 * 1024).arrayBuffer();
+    const view = new DataView(buffer);
+    if (view.getUint16(0, false) !== 0xffd8) return null;
+
+    let offset = 2;
+    const length = buffer.byteLength;
+    while (offset < length) {
+      if (view.getUint8(offset) !== 0xff) break;
+      const marker = view.getUint8(offset + 1);
+      if (marker === 0xe1) {
+        const exifLength = view.getUint16(offset + 2, false);
+        const exifBuffer = buffer.slice(offset + 4, offset + 2 + exifLength);
+        const str = new TextDecoder("latin1").decode(exifBuffer);
+        const match = /(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(str);
+        if (match) {
+          const [_, y, m, d, h, min, s] = match;
+          const date = new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min), Number(s));
+          if (!isNaN(date.getTime())) return date.getTime();
+        }
+        break;
+      }
+      offset += 2 + view.getUint16(offset + 2, false);
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+}
+
+function showUploadProgress(total) {
+  if (!els.uploadProgressModal) return;
+  els.progressTitle.textContent = "写真を処理中...";
+  els.progressSubtitle.textContent = `0 / ${total}枚を処理中`;
+  els.progressBarFill.style.width = "0%";
+  els.uploadProgressModal.hidden = false;
+}
+
+function updateUploadProgress(current, total) {
+  if (!els.uploadProgressModal) return;
+  const pct = Math.round((current / total) * 100);
+  els.progressSubtitle.textContent = `${current} / ${total}枚を処理完了 (${pct}%)`;
+  els.progressBarFill.style.width = `${pct}%`;
+}
+
+function hideUploadProgress() {
+  if (!els.uploadProgressModal) return;
+  els.uploadProgressModal.hidden = true;
+}
+
 async function importFiles(fileList) {
-  const files = Array.from(fileList).filter(isSupportedImageFile);
-  if (!files.length) return;
+  const rawFiles = Array.from(fileList);
+  if (!rawFiles.length) return;
 
   pauseMemory();
+  showUploadProgress(rawFiles.length);
+
   const firstImportedId = generatePhotoId();
-  for (const [index, file] of files.entries()) {
+  for (const [index, rawFile] of rawFiles.entries()) {
+    updateUploadProgress(index, rawFiles.length);
+    const file = await convertHeicIfNeeded(rawFile);
+    if (!isSupportedImageFile(file)) continue;
+
+    const exifDate = await extractExifDate(file);
+    const photoDate = exifDate || file.lastModified || Date.now();
     const dimensions = await getImageDimensions(file);
     const photoId = index === 0 ? firstImportedId : generatePhotoId();
 
     if (cloud.ready) {
       try {
-        state.photos.push(await uploadPhotoToCloud(file, dimensions, photoId));
+        const uploaded = await uploadPhotoToCloud(file, dimensions, photoId);
+        uploaded.date = photoDate;
+        state.photos.push(uploaded);
         continue;
       } catch (error) {
         console.warn("クラウドへのアップロードに失敗しました。端末内に保存します。", error);
@@ -1118,12 +1295,15 @@ async function importFiles(fileList) {
       id: photoId,
       name: file.name,
       type: file.type,
-      date: file.lastModified || Date.now(),
+      date: photoDate,
       width: dimensions.width,
       height: dimensions.height,
       blob: file,
       thumbnailBlob,
       source: "local",
+      memo: "",
+      favorite: false,
+      tags: [],
     };
     try {
       await savePhoto(photo);
@@ -1132,6 +1312,9 @@ async function importFiles(fileList) {
     }
     state.photos.push(photo);
   }
+
+  updateUploadProgress(rawFiles.length, rawFiles.length);
+  setTimeout(hideUploadProgress, 300);
 
   sortPhotos();
   state.currentIndex = Math.max(0, state.photos.findIndex((photo) => photo.id === firstImportedId));
@@ -1409,7 +1592,298 @@ els.themeToggle.addEventListener("click", () => {
   savePreferences();
 });
 
+// === 新機能ロジック ===
+
+// 1. お気に入りトグル
+async function toggleFavoriteCurrentPhoto() {
+  const current = state.photos[state.currentIndex];
+  if (!current) return;
+  current.favorite = !current.favorite;
+  if (els.favoriteBtn) {
+    els.favoriteBtn.classList.toggle("is-favorite", current.favorite);
+  }
+
+  if (current.source === "local" || current.blob) {
+    try {
+      await savePhoto(current);
+    } catch (e) {
+      console.warn("Favorite save local failed:", e);
+    }
+  }
+
+  if (cloud.ready && current.source === "cloud") {
+    try {
+      await fetch(apiUrl(`/api/photos/${encodeURIComponent(current.id)}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ favorite: current.favorite }),
+      });
+    } catch (e) {
+      console.warn("Favorite save cloud failed:", e);
+    }
+  }
+
+  writeCloudPhotoCache(state.photos);
+  renderCollections();
+  renderThumbs();
+}
+
+// 2. 写真メモ保存
+async function saveCurrentPhotoMemo(newMemo) {
+  const current = state.photos[state.currentIndex];
+  if (!current) return;
+  current.memo = newMemo.trim();
+  if (els.photoMemoText) {
+    els.photoMemoText.textContent = current.memo ? `💬 ${current.memo}` : "💬 メモを追加...";
+    els.photoMemoText.hidden = false;
+  }
+  if (els.photoMemoInput) {
+    els.photoMemoInput.hidden = true;
+  }
+
+  if (current.source === "local" || current.blob) {
+    try {
+      await savePhoto(current);
+    } catch (e) {
+      console.warn("Memo save local failed:", e);
+    }
+  }
+
+  if (cloud.ready && current.source === "cloud") {
+    try {
+      await fetch(apiUrl(`/api/photos/${encodeURIComponent(current.id)}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memo: current.memo }),
+      });
+    } catch (e) {
+      console.warn("Memo save cloud failed:", e);
+    }
+  }
+
+  writeCloudPhotoCache(state.photos);
+}
+
+// 3. 一括ZIPダウンロード
+async function exportAlbumAsZip() {
+  if (typeof window.JSZip !== "function") {
+    updateShareStatus("ZIPライブラリの読み込みに失敗しました");
+    return;
+  }
+
+  const photos = visiblePhotos();
+  if (!photos.length) return;
+
+  const zip = new window.JSZip();
+  const folderName = safeFileName(els.albumName.value.trim() || DEFAULT_ALBUM_NAME);
+  const folder = zip.folder(folderName);
+
+  showUploadProgress(photos.length);
+  els.progressTitle.textContent = "ZIPファイルを作成中...";
+
+  try {
+    for (let i = 0; i < photos.length; i++) {
+      const photo = photos[i];
+      updateUploadProgress(i + 1, photos.length);
+      let blob = null;
+      if (photo.blob) {
+        blob = photo.blob;
+      } else {
+        const response = await fetch(createPhotoUrl(photo));
+        blob = await response.blob();
+      }
+
+      const ext = photo.type === "image/png" ? "png" : "jpg";
+      const fileName = `${String(i + 1).padStart(3, "0")}_${formatDate(photo.date).replace(/[年月日]/g, "-")}_${photo.name || "photo"}.${ext}`;
+      folder.file(fileName, blob);
+    }
+
+    els.progressSubtitle.textContent = "ZIP圧縮中...";
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(zipBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${folderName}_photos_${new Date().toISOString().slice(0, 10)}.zip`;
+    link.click();
+    URL.revokeObjectURL(url);
+    updateShareStatus("写真の一括ZIP保存が完了しました");
+  } catch (error) {
+    console.error("ZIP export failed:", error);
+    updateShareStatus("ZIP作成に失敗しました");
+  } finally {
+    hideUploadProgress();
+  }
+}
+
+// 4. BGMプレイヤー
+const bgmPlayer = {
+  ctx: null,
+  isPlaying: false,
+  timer: null,
+  init() {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    this.ctx = new AudioCtx();
+  },
+  playNote(freq, time, duration = 1.2) {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, time);
+
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(0.12, time + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(time);
+    osc.stop(time + duration);
+  },
+  toggle() {
+    if (!this.ctx) this.init();
+    if (this.ctx && this.ctx.state === "suspended") {
+      this.ctx.resume();
+    }
+
+    this.isPlaying = !this.isPlaying;
+    const offIcon = els.bgmToggle?.querySelector(".bgm-off-icon");
+    const onIcon = els.bgmToggle?.querySelector(".bgm-on-icon");
+    if (offIcon) offIcon.hidden = this.isPlaying;
+    if (onIcon) onIcon.hidden = !this.isPlaying;
+    els.bgmToggle?.classList.toggle("active", this.isPlaying);
+
+    if (this.isPlaying) {
+      this.startMelody();
+    } else {
+      this.stopMelody();
+    }
+  },
+  startMelody() {
+    const scale = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25];
+    const pattern = [0, 2, 4, 3, 2, 4, 6, 5, 4, 2, 0, 1, 2, 4, 3, 0];
+    let step = 0;
+
+    this.timer = setInterval(() => {
+      if (!this.isPlaying || !this.ctx) return;
+      const note = scale[pattern[step % pattern.length]];
+      this.playNote(note, this.ctx.currentTime, 1.4);
+      if (step % 4 === 0) {
+        this.playNote(scale[0] / 2, this.ctx.currentTime, 2.0);
+      }
+      step++;
+    }, 450);
+  },
+  stopMelody() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+};
+
+// 5. スワイプ操作
+function initSwipeControls() {
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  els.memoryStage?.addEventListener("touchstart", (e) => {
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+  }, { passive: true });
+
+  els.memoryStage?.addEventListener("touchend", (e) => {
+    const diffX = e.changedTouches[0].screenX - touchStartX;
+    const diffY = e.changedTouches[0].screenY - touchStartY;
+
+    if (Math.abs(diffX) > 45 && Math.abs(diffX) > Math.abs(diffY)) {
+      pauseMemory();
+      if (diffX < 0) {
+        nextPhoto();
+      } else {
+        previousPhoto();
+      }
+    }
+  }, { passive: true });
+}
+
+// 6. 全画面シアターモード & Lightbox
+function toggleTheaterMode() {
+  document.body.classList.toggle("theater-mode");
+  if (document.body.classList.contains("theater-mode")) {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+}
+
+function openLightbox() {
+  const current = state.photos[state.currentIndex];
+  if (!current || !els.lightboxModal) return;
+  els.lightboxImg.src = createPhotoUrl(current);
+  els.lightboxModal.hidden = false;
+}
+
+function closeLightbox() {
+  if (els.lightboxModal) els.lightboxModal.hidden = true;
+}
+
+// 7. PWA初期化
+function initPwa() {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./sw.js").catch((err) => {
+      console.warn("SW registration failed:", err);
+    });
+  }
+}
+
 els.exportBtn.addEventListener("click", exportAlbum);
+els.zipExportBtn?.addEventListener("click", exportAlbumAsZip);
+
+els.bgmToggle?.addEventListener("click", () => bgmPlayer.toggle());
+els.fullscreenToggle?.addEventListener("click", toggleTheaterMode);
+
+els.favoriteBtn?.addEventListener("click", toggleFavoriteCurrentPhoto);
+els.zoomBtn?.addEventListener("click", openLightbox);
+els.lightboxCloseBtn?.addEventListener("click", closeLightbox);
+els.lightboxModal?.addEventListener("click", (e) => {
+  if (e.target === els.lightboxModal || e.target.classList.contains("lightbox-content")) {
+    closeLightbox();
+  }
+});
+
+els.photoMemoText?.addEventListener("click", () => {
+  els.photoMemoText.hidden = true;
+  els.photoMemoInput.hidden = false;
+  els.photoMemoInput.focus();
+});
+
+els.photoMemoInput?.addEventListener("blur", () => {
+  saveCurrentPhotoMemo(els.photoMemoInput.value);
+});
+
+els.photoMemoInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    saveCurrentPhotoMemo(els.photoMemoInput.value);
+  }
+});
+
+els.playOnThisDayBtn?.addEventListener("click", () => {
+  state.activeCollection = "on_this_day";
+  const onThisDay = getOnThisDayPhotos();
+  if (onThisDay.length) {
+    state.currentIndex = state.photos.findIndex((p) => p.id === onThisDay[0].id);
+    render();
+    playMemory();
+  }
+});
 
 els.syncNowBtn?.addEventListener("click", syncLocalPhotosToCloud);
 
@@ -1427,47 +1901,13 @@ els.albumImportInput.addEventListener("change", (event) => {
   event.target.value = "";
 });
 
-els.clearBtn?.addEventListener("click", () => {
-  if (cloud.ready && hasCloudPhotos() && !canDeleteEntireCloudAlbum()) {
-    updateShareStatus("共有アルバムの削除には管理者設定が必要です");
-    return;
-  }
-
-  if (els.confirmDialog && typeof els.confirmDialog.showModal === "function") {
-    els.confirmDialog.showModal();
-  }
-});
-
-els.confirmClear?.addEventListener("click", async () => {
-  pauseMemory();
-  if (cloud.ready) {
-    try {
-      await deleteCloudPhotos();
-    } catch (error) {
-      console.warn("クラウド写真の削除に失敗しました。", error);
-      updateShareStatus("クラウド写真の削除に失敗しました");
-      return;
-    }
-  }
-
-  try {
-    await clearPhotos();
-  } catch (error) {
-    console.warn("保存済み写真の削除に失敗しました。", error);
-  }
-  revokePhotoUrls();
-  state.photos = [];
-  state.currentIndex = 0;
-  state.activeCollection = "all";
-  clearCloudPhotoCache();
-  render();
-  updateSyncStatus("写真を削除しました。");
-});
-
 window.addEventListener("beforeunload", () => {
   revokePhotoUrls();
   savePreferences();
 });
+
+initSwipeControls();
+initPwa();
 
 applyPreferences();
 loadInitialPhotos();

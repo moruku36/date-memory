@@ -4,11 +4,17 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+    <meta name="theme-color" content="#ff758c">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon.svg">
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <title>デートのメモリー</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
   </head>
   <body>
-    <div class="app-shell">
+    <div class="app-shell" id="appShell">
       <header class="topbar" aria-label="アルバム操作">
         <div class="brand">
           <span class="brand-mark" aria-hidden="true"></span>
@@ -19,13 +25,27 @@
         </div>
 
         <div class="top-actions">
+          <button class="icon-button" id="bgmToggle" type="button" aria-label="BGM再生" title="BGM再生">
+            <svg class="bgm-off-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"></path>
+              <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" stroke-width="2"></line>
+            </svg>
+            <svg class="bgm-on-icon" aria-hidden="true" viewBox="0 0 24 24" hidden>
+              <path d="M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"></path>
+            </svg>
+          </button>
+          <button class="icon-button" id="fullscreenToggle" type="button" aria-label="シアターモード" title="全画面シアター">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+            </svg>
+          </button>
           <label class="button primary" for="photoInput">
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <path d="M12 5v14M5 12h14"></path>
             </svg>
             写真を選ぶ
           </label>
-          <input id="photoInput" type="file" accept="image/*" multiple>
+          <input id="photoInput" type="file" accept="image/*,.heic,.heif" multiple>
           <button class="icon-button" id="themeToggle" type="button" aria-label="テーマ切替" title="テーマ切替">
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <path d="M12 3a9 9 0 1 0 9 9 6.5 6.5 0 0 1-9-9Z"></path>
@@ -34,8 +54,20 @@
         </div>
       </header>
 
+      <!-- ✨ 過去の今日の思い出バナー -->
+      <aside class="on-this-day-banner" id="onThisDayBanner" hidden>
+        <div class="on-this-day-content">
+          <span class="sparkle-icon">✨</span>
+          <div>
+            <strong>過去の今日の思い出</strong>
+            <p id="onThisDaySubtitle">1年前の今日撮影された写真があります</p>
+          </div>
+        </div>
+        <button class="button compact glass" id="playOnThisDayBtn" type="button">再生する</button>
+      </aside>
+
       <main class="workspace">
-        <section class="memory-stage" aria-label="メモリー再生">
+        <section class="memory-stage" id="memoryStage" aria-label="メモリー再生">
           <div class="stage-bg" id="stageBg"></div>
           <div class="stage-sheen" aria-hidden="true"></div>
 
@@ -56,11 +88,41 @@
           </div>
 
           <article class="hero-photo" id="heroPhoto" hidden>
-            <img id="currentPhoto" alt="" decoding="async" fetchpriority="high">
+            <div class="hero-image-wrapper" id="heroImageWrapper">
+              <img id="currentPhoto" alt="" decoding="async" fetchpriority="high">
+              
+              <!-- 写真上のクイックアクションボタン -->
+              <div class="photo-overlay-actions">
+                <button class="overlay-button" id="favoriteBtn" type="button" aria-label="お気に入り" title="お気に入り">
+                  <svg class="heart-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path>
+                  </svg>
+                </button>
+                <button class="overlay-button" id="zoomBtn" type="button" aria-label="拡大" title="拡大プレビュー">
+                  <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    <line x1="11" y1="8" x2="11" y2="14"></line>
+                    <line x1="8" y1="11" x2="14" y2="11"></line>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
             <div class="photo-caption">
-              <p id="memoryDate">Memory</p>
-              <h2 id="memoryTitle">デートのメモリー</h2>
-              <span id="memoryCounter">1 / 1</span>
+              <div class="caption-header">
+                <div>
+                  <p id="memoryDate">Memory</p>
+                  <h2 id="memoryTitle">デートのメモリー</h2>
+                </div>
+                <span id="memoryCounter">1 / 1</span>
+              </div>
+
+              <!-- 💬 写真メモ・コメントエリア -->
+              <div class="photo-memo-container" id="photoMemoContainer">
+                <p class="photo-memo-text" id="photoMemoText">💬 メモを追加...</p>
+                <input class="photo-memo-input" id="photoMemoInput" type="text" placeholder="思い出のメモ・感想・場所を入力..." maxlength="200" hidden>
+              </div>
             </div>
           </article>
 
@@ -102,10 +164,11 @@
 
           <div class="panel-section">
             <div class="section-head">
-              <h2>ムード</h2>
+              <h2>ムード & エフェクト</h2>
             </div>
             <div class="segmented" role="group" aria-label="ムード">
               <button class="segment active" data-mood="cinema" type="button">Cinema</button>
+              <button class="segment" data-mood="kenburns" type="button">Ken Burns</button>
               <button class="segment" data-mood="day" type="button">Day</button>
               <button class="segment" data-mood="night" type="button">Night</button>
             </div>
@@ -121,20 +184,26 @@
 
           <div class="panel-section">
             <div class="section-head">
-              <h2>共有</h2>
+              <h2>データ & 保存</h2>
             </div>
             <div class="share-actions">
-              <button class="button quiet" id="exportBtn" type="button" disabled>
+              <button class="button primary compact" id="zipExportBtn" type="button" disabled>
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
+                </svg>
+                写真の一括保存(ZIP)
+              </button>
+              <button class="button quiet compact" id="exportBtn" type="button" disabled>
                 <svg aria-hidden="true" viewBox="0 0 24 24">
                   <path d="M12 3v12M8 11l4 4 4-4M5 21h14"></path>
                 </svg>
-                書き出し
+                JSON書出
               </button>
-              <label class="button quiet" for="albumImportInput">
+              <label class="button quiet compact" for="albumImportInput">
                 <svg aria-hidden="true" viewBox="0 0 24 24">
                   <path d="M12 21V9M8 13l4-4 4 4M5 3h14"></path>
                 </svg>
-                読み込み
+                JSON読込
               </label>
               <input id="albumImportInput" type="file" accept="application/json,.json">
             </div>
@@ -185,6 +254,30 @@
         </section>
       </main>
 
+      <!-- ⏳ アップロード進捗モーダル -->
+      <div class="progress-modal" id="uploadProgressModal" hidden>
+        <div class="progress-card">
+          <div class="progress-spinner"></div>
+          <h3 id="progressTitle">写真を処理中...</h3>
+          <p id="progressSubtitle">1 / 1枚をアップロード中</p>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progressBarFill" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 🔍 Lightbox ズームプレビューモーダル -->
+      <div class="lightbox-modal" id="lightboxModal" hidden>
+        <button class="icon-button glass lightbox-close" id="lightboxCloseBtn" type="button" aria-label="閉じる">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M18 6L6 18M6 6l12 12"></path>
+          </svg>
+        </button>
+        <div class="lightbox-content" id="lightboxContent">
+          <img id="lightboxImg" alt="" decoding="async">
+        </div>
+        <p class="lightbox-hint">ピンチまたはダブルタップでズーム</p>
+      </div>
     </div>
 
     <script src="config.js"></script>

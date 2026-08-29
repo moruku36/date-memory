@@ -205,6 +205,9 @@ function publicPhoto(doc) {
     hasThumbnail: Boolean(doc.thumbnailType || storedBuffer(doc.thumbnail)),
     updatedAt: timestamp(doc.updatedAt || doc.createdAt || doc.sortTime),
     source: "cloud",
+    memo: doc.memo || "",
+    favorite: Boolean(doc.favorite),
+    tags: Array.isArray(doc.tags) ? doc.tags : [],
   };
 }
 

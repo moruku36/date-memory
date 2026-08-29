@@ -96,6 +96,9 @@ module.exports = async function handler(req, res) {
         height: Number(body.height) || 0,
         image: buffer,
         updatedAt: now,
+        memo: typeof body.memo === "string" ? body.memo.slice(0, 1000) : "",
+        favorite: Boolean(body.favorite),
+        tags: Array.isArray(body.tags) ? body.tags.map((t) => String(t).slice(0, 50)).slice(0, 20) : [],
       };
 
       if (thumbnail) {

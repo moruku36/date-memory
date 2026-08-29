@@ -4,6 +4,8 @@ const {
   defaultAlbumId,
   getDatabase,
   isValidAlbumId,
+  publicPhoto,
+  readJson,
   safeImageContentType,
   setCorsHeaders,
   storedBuffer,
@@ -73,6 +75,38 @@ module.exports = async function handler(req, res) {
       return;
     }
 
+    if (req.method === "PATCH") {
+      const body = await readJson(req);
+      const updateFields = { updatedAt: new Date() };
+
+      if (typeof body.memo === "string") {
+        updateFields.memo = body.memo.slice(0, 1000);
+      }
+      if (typeof body.favorite === "boolean") {
+        updateFields.favorite = body.favorite;
+      }
+      if (Array.isArray(body.tags)) {
+        updateFields.tags = body.tags.map((t) => String(t).slice(0, 50)).slice(0, 20);
+      }
+      if (Number.isFinite(Number(body.date))) {
+        updateFields.sortTime = Number(body.date);
+      }
+
+      const result = await collection.findOneAndUpdate(
+        { id, albumId },
+        { $set: updateFields },
+        { returnDocument: "after" }
+      );
+
+      if (!result) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+
+      res.status(200).json({ photo: publicPhoto(result.value || result) });
+      return;
+    }
+
     if (req.method === "DELETE") {
       const result = await collection.deleteOne({ id, albumId });
       if (!result.deletedCount) {
@@ -84,7 +118,7 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    res.setHeader("Allow", "GET,DELETE,OPTIONS");
+    res.setHeader("Allow", "GET,PATCH,DELETE,OPTIONS");
     res.status(405).json({ error: "Method not allowed" });
   } catch (error) {
     console.error(error);
