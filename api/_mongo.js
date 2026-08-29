@@ -50,7 +50,11 @@ function ensurePhotoIndexes(collection) {
 const SECRET_DEFAULT_ALBUM_ID = "dm_sec_0854100c75fac68b66bd4e30da217bc8";
 
 function defaultAlbumId() {
-  return process.env.ALBUM_ID || SECRET_DEFAULT_ALBUM_ID;
+  const envId = process.env.ALBUM_ID;
+  if (envId && envId !== "date-memory-main") {
+    return envId;
+  }
+  return SECRET_DEFAULT_ALBUM_ID;
 }
 
 function isValidAlbumId(albumId) {
