@@ -3,6 +3,7 @@ const {
   createThumbnail,
   defaultAlbumId,
   getDatabase,
+  isValidAlbumId,
   safeImageContentType,
   setCorsHeaders,
   storedBuffer,
@@ -12,9 +13,14 @@ module.exports = async function handler(req, res) {
   if (setCorsHeaders(req, res)) return;
 
   try {
+    const albumId = req.query.albumId || defaultAlbumId();
+    if (!isValidAlbumId(albumId)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
     const db = await getDatabase();
     const collection = db.collection(collectionName());
-    const albumId = req.query.albumId || defaultAlbumId();
     const id = req.query.id;
 
     if (req.method === "GET") {

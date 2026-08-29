@@ -47,15 +47,46 @@ function ensurePhotoIndexes(collection) {
   return indexesPromise;
 }
 
+const SECRET_DEFAULT_ALBUM_ID = "dm_sec_0854100c75fac68b66bd4e30da217bc8";
+
 function defaultAlbumId() {
-  return process.env.ALBUM_ID || "date-memory-main";
+  return process.env.ALBUM_ID || SECRET_DEFAULT_ALBUM_ID;
+}
+
+function isValidAlbumId(albumId) {
+  if (!albumId || typeof albumId !== "string") return false;
+  const targetId = defaultAlbumId();
+  // 厳格一致（またはシークレット形式チェック）
+  return albumId === targetId;
+}
+
+function isOriginAllowed(origin) {
+  if (!origin) return true; // 同一オリジン/直接リクエスト
+  try {
+    const url = new URL(origin);
+    const host = url.hostname;
+    return (
+      host === "date-memory.vercel.app" ||
+      host.endsWith(".vercel.app") ||
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "moruku36.github.io"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function setCorsHeaders(req, res) {
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
-  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  const origin = req.headers.origin;
+  if (origin && isOriginAllowed(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else if (!origin) {
+    res.setHeader("Access-Control-Allow-Origin", "https://date-memory.vercel.app");
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,X-Admin-Token");
+  res.setHeader("Vary", "Origin");
 
   if (req.method === "OPTIONS") {
     res.statusCode = 204;
@@ -180,9 +211,11 @@ module.exports = {
   defaultAlbumId,
   ensurePhotoIndexes,
   getDatabase,
+  isValidAlbumId,
   publicPhoto,
   readJson,
   safeImageContentType,
+  SECRET_DEFAULT_ALBUM_ID,
   setCorsHeaders,
   storedBuffer,
   THUMBNAIL_MAX_BYTES,

@@ -6,6 +6,7 @@ const {
   defaultAlbumId,
   ensurePhotoIndexes,
   getDatabase,
+  isValidAlbumId,
   publicPhoto,
   readJson,
   setCorsHeaders,
@@ -23,10 +24,25 @@ module.exports = async function handler(req, res) {
   if (setCorsHeaders(req, res)) return;
 
   try {
+    const albumId = req.query.albumId || defaultAlbumId();
+    if (!isValidAlbumId(albumId)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
     const db = await getDatabase();
     const collection = db.collection(collectionName());
-    const albumId = req.query.albumId || defaultAlbumId();
     await ensurePhotoIndexes(collection);
+
+    // 旧 albumId (date-memory-main) から新難読化IDへの安全な自動移行
+    try {
+      await collection.updateMany(
+        { albumId: "date-memory-main" },
+        { $set: { albumId: defaultAlbumId() } }
+      );
+    } catch (migError) {
+      console.warn("Migration notice:", migError);
+    }
 
     if (req.method === "GET") {
       const docs = await collection
