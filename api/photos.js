@@ -1,12 +1,15 @@
 const crypto = require("crypto");
 const {
   collectionName,
+  createThumbnail,
   dataUrlToBuffer,
   defaultAlbumId,
+  ensurePhotoIndexes,
   getDatabase,
   publicPhoto,
   readJson,
   setCorsHeaders,
+  THUMBNAIL_MAX_BYTES,
 } = require("./_mongo");
 
 function cleanText(value, fallback, maxLength = 140) {
@@ -23,13 +26,15 @@ module.exports = async function handler(req, res) {
     const db = await getDatabase();
     const collection = db.collection(collectionName());
     const albumId = req.query.albumId || defaultAlbumId();
+    await ensurePhotoIndexes(collection);
 
     if (req.method === "GET") {
       const docs = await collection
-        .find({ albumId }, { projection: { image: 0 } })
+        .find({ albumId }, { projection: { image: 0, thumbnail: 0 } })
         .sort({ sortTime: 1, createdAt: 1 })
         .toArray();
 
+      res.setHeader("Cache-Control", "no-store");
       res.status(200).json({ photos: docs.map(publicPhoto) });
       return;
     }
@@ -44,6 +49,27 @@ module.exports = async function handler(req, res) {
         return;
       }
 
+      let thumbnail;
+      if (body.thumbnailDataUrl) {
+        try {
+          const parsedThumbnail = dataUrlToBuffer(body.thumbnailDataUrl);
+          if (parsedThumbnail.buffer.length <= THUMBNAIL_MAX_BYTES) {
+            thumbnail = parsedThumbnail;
+          }
+        } catch {
+          thumbnail = null;
+        }
+      }
+
+      if (!thumbnail) {
+        try {
+          thumbnail = await createThumbnail(buffer);
+        } catch (error) {
+          console.warn("Thumbnail generation failed.", error);
+        }
+      }
+
+      const now = new Date();
       const photo = {
         id,
         albumId,
@@ -53,17 +79,24 @@ module.exports = async function handler(req, res) {
         width: Number(body.width) || 0,
         height: Number(body.height) || 0,
         image: buffer,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        updatedAt: now,
       };
+
+      if (thumbnail) {
+        photo.thumbnail = thumbnail.buffer;
+        photo.thumbnailType = thumbnail.contentType;
+      }
 
       await collection.updateOne(
         { id: photo.id, albumId: photo.albumId },
-        { $set: photo },
+        {
+          $set: photo,
+          $setOnInsert: { createdAt: now },
+        },
         { upsert: true },
       );
 
-      res.status(200).json({ photo: publicPhoto(photo) });
+      res.status(200).json({ photo: publicPhoto({ ...photo, createdAt: now }) });
       return;
     }
 
