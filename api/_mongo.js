@@ -1,6 +1,8 @@
 const { MongoClient } = require("mongodb");
+const sharp = require("sharp");
 
 let cachedClient;
+let indexesPromise;
 const SUPPORTED_IMAGE_TYPES = new Set([
   "image/gif",
   "image/heic",
@@ -9,6 +11,9 @@ const SUPPORTED_IMAGE_TYPES = new Set([
   "image/png",
   "image/webp",
 ]);
+const THUMBNAIL_MAX_EDGE = 480;
+const THUMBNAIL_QUALITY = 72;
+const THUMBNAIL_MAX_BYTES = 700 * 1024;
 
 async function getDatabase() {
   const uri = process.env.MONGODB_URI;
@@ -26,6 +31,20 @@ async function getDatabase() {
 
 function collectionName() {
   return process.env.MONGODB_COLLECTION || "photos";
+}
+
+function ensurePhotoIndexes(collection) {
+  if (!indexesPromise) {
+    indexesPromise = collection.createIndexes([
+      { key: { albumId: 1, sortTime: 1, createdAt: 1 }, name: "album_sort" },
+      { key: { albumId: 1, id: 1 }, name: "album_photo" },
+    ]).catch((error) => {
+      indexesPromise = null;
+      throw error;
+    });
+  }
+
+  return indexesPromise;
 }
 
 function defaultAlbumId() {
@@ -101,6 +120,45 @@ function safeImageContentType(value) {
   return SUPPORTED_IMAGE_TYPES.has(contentType) ? contentType : "image/jpeg";
 }
 
+function storedBuffer(value) {
+  if (!value) return null;
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof Uint8Array) return Buffer.from(value);
+  if (Buffer.isBuffer(value.buffer)) return value.buffer;
+  if (value.buffer instanceof ArrayBuffer) {
+    return Buffer.from(value.buffer, value.byteOffset || 0, value.byteLength || value.buffer.byteLength);
+  }
+  return null;
+}
+
+async function createThumbnail(buffer) {
+  const thumbnail = await sharp(buffer, { failOn: "none" })
+    .rotate()
+    .resize({
+      width: THUMBNAIL_MAX_EDGE,
+      height: THUMBNAIL_MAX_EDGE,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .jpeg({
+      quality: THUMBNAIL_QUALITY,
+      mozjpeg: true,
+    })
+    .toBuffer();
+
+  return {
+    buffer: thumbnail,
+    contentType: "image/jpeg",
+  };
+}
+
+function timestamp(value, fallback = Date.now()) {
+  if (!value) return fallback;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : fallback;
+}
+
 function publicPhoto(doc) {
   return {
     id: doc.id,
@@ -109,17 +167,23 @@ function publicPhoto(doc) {
     date: doc.sortTime,
     width: doc.width || 0,
     height: doc.height || 0,
+    hasThumbnail: Boolean(doc.thumbnailType || storedBuffer(doc.thumbnail)),
+    updatedAt: timestamp(doc.updatedAt || doc.createdAt || doc.sortTime),
     source: "cloud",
   };
 }
 
 module.exports = {
   collectionName,
+  createThumbnail,
   dataUrlToBuffer,
   defaultAlbumId,
+  ensurePhotoIndexes,
   getDatabase,
   publicPhoto,
   readJson,
   safeImageContentType,
   setCorsHeaders,
+  storedBuffer,
+  THUMBNAIL_MAX_BYTES,
 };
