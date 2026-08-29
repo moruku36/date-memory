@@ -7,6 +7,10 @@ const SUPABASE_MODULE_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@
 const CLOUD_CONFIG = window.DATE_MEMORY_CLOUD || {};
 const API_OPTIMIZE_THRESHOLD_BYTES = 1.8 * 1024 * 1024;
 const API_MAX_IMAGE_EDGE = 1800;
+const API_IMAGE_QUALITY = 0.82;
+const API_THUMBNAIL_MAX_IMAGE_EDGE = 480;
+const API_THUMBNAIL_QUALITY = 0.72;
+const CLOUD_PHOTO_CACHE_PREFIX = "date-memory-cloud-cache-v1";
 const API_WEB_FRIENDLY_IMAGE_TYPES = new Set([
   "image/gif",
   "image/jpeg",
@@ -173,6 +177,105 @@ function canDeleteEntireCloudAlbum() {
   return cloud.provider !== "api" || Boolean(cloud.adminToken);
 }
 
+function cloudPhotoCacheKey() {
+  if (cloud.provider !== "api") return "";
+  const baseUrl = cloud.apiBaseUrl || window.location.origin;
+  return `${CLOUD_PHOTO_CACHE_PREFIX}:${baseUrl}:${cloud.albumId}`;
+}
+
+function cachedCloudPhoto(photo) {
+  return {
+    id: photo.id,
+    name: photo.name,
+    type: photo.type,
+    date: photo.date,
+    width: photo.width || 0,
+    height: photo.height || 0,
+    hasThumbnail: Boolean(photo.hasThumbnail),
+    updatedAt: photo.updatedAt || photo.date || Date.now(),
+  };
+}
+
+function apiPhotoUrl(photo, variant = "full") {
+  const params = {
+    v: photo.updatedAt || photo.date || Date.now(),
+  };
+  if (variant === "thumb") params.variant = "thumb";
+  return apiUrl(`/api/photos/${encodeURIComponent(photo.id)}`, params);
+}
+
+function hydrateApiPhoto(photo) {
+  const normalized = {
+    ...photo,
+    date: Number(photo.date) || Date.now(),
+    updatedAt: Number(photo.updatedAt) || Number(photo.date) || Date.now(),
+    source: "cloud",
+  };
+
+  return {
+    ...normalized,
+    url: apiPhotoUrl(normalized),
+    thumbnailUrl: apiPhotoUrl(normalized, "thumb"),
+  };
+}
+
+function readCachedCloudPhotos() {
+  const cacheKey = cloudPhotoCacheKey();
+  if (!cacheKey) return [];
+
+  try {
+    const payload = JSON.parse(localStorage.getItem(cacheKey) || "{}");
+    if (!Array.isArray(payload.photos)) return [];
+    return payload.photos.filter((photo) => photo.id);
+  } catch {
+    return [];
+  }
+}
+
+function writeCloudPhotoCache(photos) {
+  const cacheKey = cloudPhotoCacheKey();
+  if (!cacheKey) return;
+
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify({
+      cachedAt: Date.now(),
+      photos: photos.filter((photo) => photo.source === "cloud").map(cachedCloudPhoto),
+    }));
+  } catch (error) {
+    console.warn("写真一覧キャッシュの保存に失敗しました。", error);
+  }
+}
+
+function clearCloudPhotoCache() {
+  const cacheKey = cloudPhotoCacheKey();
+  if (!cacheKey) return;
+
+  try {
+    localStorage.removeItem(cacheKey);
+  } catch (error) {
+    console.warn("写真一覧キャッシュの削除に失敗しました。", error);
+  }
+}
+
+function restoreCachedCloudPhotos({ keepLocal = true } = {}) {
+  if (cloud.provider !== "api") return false;
+
+  const cachedPhotos = readCachedCloudPhotos().map(hydrateApiPhoto);
+  if (!cachedPhotos.length) return false;
+
+  const cachedIds = new Set(cachedPhotos.map((photo) => photo.id));
+  const unsyncedLocal = keepLocal
+    ? localOnlyPhotos().filter((photo) => !cachedIds.has(photo.id))
+    : [];
+
+  state.photos = [...cachedPhotos, ...unsyncedLocal];
+  state.currentIndex = 0;
+  state.activeCollection = "all";
+  render();
+  updateSyncStatus("前回の写真を先に表示しながら、最新状態を確認しています。");
+  return true;
+}
+
 function selectedPhotos() {
   return state.photos.filter((photo) => state.selectedIds.has(photo.id));
 }
@@ -244,11 +347,25 @@ function sortPhotos() {
   state.photos.sort((a, b) => a.date - b.date);
 }
 
+function createObjectUrl(photo, urlKey, blobKey) {
+  if (photo[urlKey]) return photo[urlKey];
+  if (!photo[blobKey]) return "";
+  photo[urlKey] = URL.createObjectURL(photo[blobKey]);
+  return photo[urlKey];
+}
+
 function createPhotoUrl(photo) {
-  if (photo.url) return photo.url;
-  if (!photo.blob) return "";
-  photo.url = URL.createObjectURL(photo.blob);
-  return photo.url;
+  return createObjectUrl(photo, "url", "blob");
+}
+
+function createThumbnailUrl(photo) {
+  if (photo.thumbnailUrl) return photo.thumbnailUrl;
+  if (photo.thumbnailBlob) return createObjectUrl(photo, "thumbnailUrl", "thumbnailBlob");
+  return createPhotoUrl(photo);
+}
+
+function revokeObjectUrl(url) {
+  if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
 }
 
 function blobToDataUrl(blob) {
@@ -276,8 +393,10 @@ function dataUrlToBlob(dataUrl) {
 
 function revokePhotoUrls() {
   state.photos.forEach((photo) => {
-    if (photo.url) URL.revokeObjectURL(photo.url);
-    photo.url = "";
+    revokeObjectUrl(photo.url);
+    revokeObjectUrl(photo.thumbnailUrl);
+    if (photo.url?.startsWith("blob:")) photo.url = "";
+    if (photo.thumbnailUrl?.startsWith("blob:")) photo.thumbnailUrl = "";
   });
 }
 
@@ -331,7 +450,9 @@ function renderCollections() {
     button.dataset.collection = collection.id;
 
     const img = document.createElement("img");
-    img.src = createPhotoUrl(collection.cover);
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.src = createThumbnailUrl(collection.cover);
     img.alt = "";
 
     const text = document.createElement("span");
@@ -372,9 +493,11 @@ function renderHero() {
 
   const current = state.photos[state.currentIndex] || state.photos[0];
   const url = createPhotoUrl(current);
+  const backgroundUrl = createThumbnailUrl(current) || url;
   els.currentPhoto.src = url;
   els.currentPhoto.alt = current.name;
-  els.stageBg.style.backgroundImage = `linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.34)), url("${url}")`;
+  els.currentPhoto.decoding = "async";
+  els.stageBg.style.backgroundImage = `linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.34)), url("${backgroundUrl}")`;
   els.memoryDate.textContent = formatDate(current.date);
   els.memoryTitle.textContent = els.albumName.value.trim() || DEFAULT_ALBUM_NAME;
 
@@ -428,7 +551,9 @@ function renderThumbs() {
     }
 
     const img = document.createElement("img");
-    img.src = createPhotoUrl(photo);
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.src = createThumbnailUrl(photo);
     img.alt = photo.name;
 
     const meta = document.createElement("span");
@@ -539,17 +664,22 @@ function apiUrl(path, params = {}) {
   return `${cloud.apiBaseUrl}${path}?${query.toString()}`;
 }
 
-async function optimizeImageForApi(file) {
-  const originalDimensions = await getImageDimensions(file);
-  const needsResize = file.size > API_OPTIMIZE_THRESHOLD_BYTES;
-  const needsFormatConversion = !API_WEB_FRIENDLY_IMAGE_TYPES.has(file.type.toLowerCase());
-  if (!originalDimensions.width || !originalDimensions.height || (!needsResize && !needsFormatConversion)) {
-    return { file, dimensions: originalDimensions };
-  }
+function jpegFileName(fileName, suffix = "") {
+  const name = fileName || "memory-photo";
+  const base = name.replace(/\.[^.]+$/, "") || "memory-photo";
+  return `${base}${suffix}.jpg`;
+}
 
-  const scale = needsResize
-    ? Math.min(1, API_MAX_IMAGE_EDGE / Math.max(originalDimensions.width, originalDimensions.height))
-    : 1;
+async function createJpegDerivative(file, {
+  maxEdge,
+  quality,
+  suffix = "",
+  dimensions: knownDimensions = null,
+}) {
+  const originalDimensions = knownDimensions || await getImageDimensions(file);
+  if (!originalDimensions.width || !originalDimensions.height) return null;
+
+  const scale = Math.min(1, maxEdge / Math.max(originalDimensions.width, originalDimensions.height));
   const width = Math.round(originalDimensions.width * scale);
   const height = Math.round(originalDimensions.height * scale);
 
@@ -569,20 +699,45 @@ async function optimizeImageForApi(file) {
   context.drawImage(image, 0, 0, width, height);
 
   const blob = await new Promise((resolve) => {
-    canvas.toBlob(resolve, "image/jpeg", 0.82);
+    canvas.toBlob(resolve, "image/jpeg", quality);
   });
 
-  if (!blob) return { file, dimensions: originalDimensions };
-
-  const optimizedFile = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), {
-    type: "image/jpeg",
-    lastModified: file.lastModified || Date.now(),
-  });
+  if (!blob) return null;
 
   return {
-    file: optimizedFile,
+    file: new File([blob], jpegFileName(file.name, suffix), {
+      type: "image/jpeg",
+      lastModified: file.lastModified || Date.now(),
+    }),
     dimensions: { width, height },
   };
+}
+
+async function optimizeImageForApi(file) {
+  const originalDimensions = await getImageDimensions(file);
+  const needsResize = file.size > API_OPTIMIZE_THRESHOLD_BYTES;
+  const needsFormatConversion = !API_WEB_FRIENDLY_IMAGE_TYPES.has(file.type.toLowerCase());
+  if (!originalDimensions.width || !originalDimensions.height || (!needsResize && !needsFormatConversion)) {
+    return { file, dimensions: originalDimensions };
+  }
+
+  return await createJpegDerivative(file, {
+    maxEdge: needsResize ? API_MAX_IMAGE_EDGE : Math.max(originalDimensions.width, originalDimensions.height),
+    quality: API_IMAGE_QUALITY,
+    dimensions: originalDimensions,
+  }) || { file, dimensions: originalDimensions };
+}
+
+async function createThumbnailForApi(file) {
+  const thumbnail = await createJpegDerivative(file, {
+    maxEdge: API_THUMBNAIL_MAX_IMAGE_EDGE,
+    quality: API_THUMBNAIL_QUALITY,
+    suffix: "-thumb",
+  });
+
+  if (!thumbnail) return null;
+
+  return thumbnail.file;
 }
 
 async function setupCloudClient() {
@@ -637,6 +792,14 @@ async function uploadPhotoToCloud(file, dimensions, photoId = generatePhotoId())
   if (cloud.provider === "api") {
     const { file: uploadFile, dimensions: uploadDimensions } = await optimizeImageForApi(file);
     const dataUrl = await blobToDataUrl(uploadFile);
+    let thumbnailDataUrl = "";
+    try {
+      const thumbnailFile = await createThumbnailForApi(uploadFile);
+      thumbnailDataUrl = thumbnailFile ? await blobToDataUrl(thumbnailFile) : "";
+    } catch (error) {
+      console.warn("アップロード用サムネイルの作成に失敗しました。", error);
+    }
+
     const response = await fetch(apiUrl("/api/photos"), {
       method: "POST",
       headers: {
@@ -651,6 +814,7 @@ async function uploadPhotoToCloud(file, dimensions, photoId = generatePhotoId())
         width: uploadDimensions.width || dimensions.width,
         height: uploadDimensions.height || dimensions.height,
         dataUrl,
+        thumbnailDataUrl,
       }),
     });
 
@@ -660,9 +824,7 @@ async function uploadPhotoToCloud(file, dimensions, photoId = generatePhotoId())
 
     const result = await response.json();
     return {
-      ...result.photo,
-      source: "cloud",
-      url: apiUrl(`/api/photos/${encodeURIComponent(result.photo.id)}`),
+      ...hydrateApiPhoto(result.photo),
     };
   }
 
@@ -718,16 +880,13 @@ async function loadCloudPhotos({ keepLocal = true } = {}) {
 
   cloud.loading = true;
   updateSyncStatus("クラウドから写真を読み込んでいます。");
+  restoreCachedCloudPhotos({ keepLocal });
   try {
     if (cloud.provider === "api") {
       const response = await fetch(apiUrl("/api/photos"));
       if (!response.ok) throw new Error(`Load failed: ${response.status}`);
       const result = await response.json();
-      const cloudPhotos = (result.photos || []).map((photo) => ({
-        ...photo,
-        source: "cloud",
-        url: apiUrl(`/api/photos/${encodeURIComponent(photo.id)}`),
-      }));
+      const cloudPhotos = (result.photos || []).map(hydrateApiPhoto);
       const cloudIds = new Set(cloudPhotos.map((photo) => photo.id));
       const unsyncedLocal = keepLocal
         ? localOnlyPhotos().filter((photo) => !cloudIds.has(photo.id))
@@ -737,6 +896,7 @@ async function loadCloudPhotos({ keepLocal = true } = {}) {
       state.photos = [...cloudPhotos, ...unsyncedLocal];
       state.currentIndex = 0;
       state.activeCollection = "all";
+      writeCloudPhotoCache(cloudPhotos);
       render();
       updateSyncStatus(unsyncedLocal.length ? `${cloudPhotos.length}枚を同期済み、${unsyncedLocal.length}枚はこの端末のみです。` : `${cloudPhotos.length}枚をクラウドから表示しています。`);
       return;
@@ -913,6 +1073,7 @@ async function deleteSelectedPhotos() {
     if (state.activeCollection !== "all" && !visiblePhotos().length) {
       state.activeCollection = "all";
     }
+    writeCloudPhotoCache(state.photos);
     render();
     updateShareStatus(`${photos.length}枚を削除しました`);
   } catch (error) {
@@ -945,6 +1106,13 @@ async function importFiles(fileList) {
       }
     }
 
+    let thumbnailBlob = null;
+    try {
+      thumbnailBlob = await createThumbnailForApi(file);
+    } catch (error) {
+      console.warn("サムネイルの作成に失敗しました。", error);
+    }
+
     const photo = {
       id: photoId,
       name: file.name,
@@ -953,6 +1121,7 @@ async function importFiles(fileList) {
       width: dimensions.width,
       height: dimensions.height,
       blob: file,
+      thumbnailBlob,
       source: "local",
     };
     try {
@@ -966,6 +1135,7 @@ async function importFiles(fileList) {
   sortPhotos();
   state.currentIndex = Math.max(0, state.photos.findIndex((photo) => photo.id === firstImportedId));
   state.activeCollection = "all";
+  writeCloudPhotoCache(state.photos);
   render();
   updateSyncStatus();
 }
@@ -1065,6 +1235,13 @@ async function importAlbumFile(file) {
         continue;
       }
 
+      let thumbnailBlob = null;
+      try {
+        thumbnailBlob = await createThumbnailForApi(blob);
+      } catch (error) {
+        console.warn("読み込んだ写真のサムネイル作成に失敗しました。", error);
+      }
+
       const photo = {
         id,
         name: item.name || "memory-photo",
@@ -1073,6 +1250,7 @@ async function importAlbumFile(file) {
         width: Number(item.width) || 0,
         height: Number(item.height) || 0,
         blob,
+        thumbnailBlob,
         source: "local",
       };
 
@@ -1092,6 +1270,7 @@ async function importAlbumFile(file) {
       state.currentIndex = Math.max(0, state.photos.findIndex((photo) => photo.id === firstAddedId));
     }
     state.activeCollection = "all";
+    writeCloudPhotoCache(state.photos);
     render();
     updateShareStatus(addedCount ? `${addedCount}枚読み込みました` : "追加済みのアルバムです");
   } catch (error) {
@@ -1279,6 +1458,7 @@ els.confirmClear.addEventListener("click", async () => {
   state.photos = [];
   state.currentIndex = 0;
   state.activeCollection = "all";
+  clearCloudPhotoCache();
   render();
   updateSyncStatus("写真を削除しました。");
 });
