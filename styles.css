@@ -412,32 +412,47 @@ body.theme-dark .play-button {
   position: absolute;
   left: 26px;
   right: 26px;
-  bottom: 24px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 16px;
+  bottom: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
   color: white;
-  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.photo-caption > * {
+  pointer-events: auto;
+}
+
+.caption-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
 }
 
 .photo-caption p,
 .photo-caption span {
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.88);
   font-weight: 700;
 }
 
 .photo-caption h2 {
   max-width: 13em;
-  font-size: 4rem;
-  line-height: 0.98;
+  font-size: 3.2rem;
+  line-height: 1.05;
 }
 
 .stage-controls {
   position: absolute;
   left: 50%;
-  bottom: 28px;
+  bottom: 24px;
   transform: translateX(-50%);
+  z-index: 3;
 }
 
 .side-panel,
@@ -915,16 +930,16 @@ body.mood-night {
   .photo-caption {
     left: 16px;
     right: 16px;
-    bottom: 18px;
-    grid-template-columns: 1fr;
+    bottom: 84px;
+    gap: 8px;
   }
 
   .photo-caption h2 {
-    font-size: 2.55rem;
+    font-size: 2.2rem;
   }
 
   .stage-controls {
-    bottom: 18px;
+    bottom: 16px;
   }
 
   .side-panel {
