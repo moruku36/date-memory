@@ -175,15 +175,15 @@ async function createThumbnail(buffer) {
       fit: "inside",
       withoutEnlargement: true,
     })
-    .jpeg({
+    .webp({
       quality: THUMBNAIL_QUALITY,
-      mozjpeg: true,
+      effort: 4,
     })
     .toBuffer();
 
   return {
     buffer: thumbnail,
-    contentType: "image/jpeg",
+    contentType: "image/webp",
   };
 }
 

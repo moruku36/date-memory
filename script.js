@@ -5,11 +5,12 @@ const PREFERENCES_KEY = "couple-memory-preferences";
 const DEFAULT_ALBUM_NAME = "デートのメモリー";
 const SUPABASE_MODULE_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 const CLOUD_CONFIG = window.DATE_MEMORY_CLOUD || {};
-const API_OPTIMIZE_THRESHOLD_BYTES = 1.8 * 1024 * 1024;
+const API_OPTIMIZE_THRESHOLD_BYTES = 1.2 * 1024 * 1024;
 const API_MAX_IMAGE_EDGE = 1800;
-const API_IMAGE_QUALITY = 0.82;
+const API_IMAGE_QUALITY = 0.80;
 const API_THUMBNAIL_MAX_IMAGE_EDGE = 480;
-const API_THUMBNAIL_QUALITY = 0.72;
+const API_THUMBNAIL_QUALITY = 0.70;
+const THUMB_BATCH_SIZE = 36;
 const CLOUD_PHOTO_CACHE_PREFIX = "date-memory-cloud-cache-v1";
 const API_WEB_FRIENDLY_IMAGE_TYPES = new Set([
   "image/gif",
@@ -29,6 +30,8 @@ const state = {
   mood: "cinema",
   selectionMode: false,
   selectedIds: new Set(),
+  renderedThumbCount: THUMB_BATCH_SIZE,
+  thumbObserver: null,
 };
 
 const cloud = {
@@ -532,6 +535,7 @@ function renderCollections() {
     button.append(img, text, arrow);
     button.addEventListener("click", () => {
       state.activeCollection = collection.id;
+      state.renderedThumbCount = THUMB_BATCH_SIZE;
       const first = collection.id === "all" ? state.photos[0] : state.photos.find((photo) => formatMonth(photo.date) === collection.id);
       state.currentIndex = Math.max(0, state.photos.findIndex((photo) => photo.id === first?.id));
       render();
@@ -605,83 +609,123 @@ function renderHero() {
   });
 }
 
+function renderThumbItem(photo, index) {
+  const globalIndex = state.photos.findIndex((item) => item.id === photo.id);
+  const button = document.createElement("button");
+  button.className = "thumb";
+  button.type = "button";
+  button.dataset.id = photo.id;
+  const selected = state.selectedIds.has(photo.id);
+  button.setAttribute("aria-label", state.selectionMode
+    ? `${photo.name}${selected ? "の選択を解除" : "を選択"}`
+    : `${photo.name}を表示`);
+
+  if (state.view === "mosaic") {
+    if (index % 9 === 0) button.classList.add("wide");
+    if (index % 7 === 3) button.classList.add("tall");
+  }
+
+  if (state.selectionMode) {
+    button.classList.add("selectable");
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+  }
+
+  if (selected) {
+    button.classList.add("selected");
+  }
+
+  if (globalIndex === state.currentIndex) {
+    button.classList.add("active");
+  }
+
+  const img = document.createElement("img");
+  img.loading = "lazy";
+  img.decoding = "async";
+  img.src = createThumbnailUrl(photo);
+  img.alt = photo.name;
+
+  if (photo.favorite) {
+    const favBadge = document.createElement("span");
+    favBadge.className = "thumb-fav-badge";
+    favBadge.textContent = "❤️";
+    button.append(favBadge);
+  }
+
+  const meta = document.createElement("span");
+  meta.className = "thumb-meta";
+  const order = document.createElement("span");
+  const date = document.createElement("span");
+  order.textContent = String(index + 1);
+  date.textContent = formatDate(photo.date).replace("年", ".").replace("月", ".").replace("日", "");
+  meta.append(order, date);
+
+  const check = document.createElement("span");
+  check.className = "thumb-check";
+  check.setAttribute("aria-hidden", "true");
+
+  button.append(img, check, meta);
+  button.addEventListener("click", () => {
+    if (state.selectionMode) {
+      if (selected) {
+        state.selectedIds.delete(photo.id);
+      } else {
+        state.selectedIds.add(photo.id);
+      }
+      render();
+      return;
+    }
+
+    state.currentIndex = globalIndex;
+    pauseMemory();
+    render();
+  });
+
+  return button;
+}
+
 function renderThumbs() {
   const photos = visiblePhotos();
-  els.thumbGrid.innerHTML = "";
   els.thumbGrid.className = `thumb-grid ${state.view}`;
 
-  photos.forEach((photo, index) => {
-    const globalIndex = state.photos.findIndex((item) => item.id === photo.id);
-    const button = document.createElement("button");
-    button.className = "thumb";
-    button.type = "button";
-    button.dataset.id = photo.id;
-    const selected = state.selectedIds.has(photo.id);
-    button.setAttribute("aria-label", state.selectionMode
-      ? `${photo.name}${selected ? "の選択を解除" : "を選択"}`
-      : `${photo.name}を表示`);
+  if (state.thumbObserver) {
+    state.thumbObserver.disconnect();
+    state.thumbObserver = null;
+  }
 
-    if (state.view === "mosaic") {
-      if (index % 9 === 0) button.classList.add("wide");
-      if (index % 7 === 3) button.classList.add("tall");
-    }
+  const currentVisIdx = currentVisibleIndex();
+  if (currentVisIdx >= state.renderedThumbCount) {
+    state.renderedThumbCount = Math.min(
+      photos.length,
+      Math.ceil((currentVisIdx + 1) / THUMB_BATCH_SIZE) * THUMB_BATCH_SIZE
+    );
+  }
 
-    if (state.selectionMode) {
-      button.classList.add("selectable");
-      button.setAttribute("aria-pressed", selected ? "true" : "false");
-    }
+  const limit = Math.min(photos.length, state.renderedThumbCount);
+  const fragment = document.createDocumentFragment();
 
-    if (selected) {
-      button.classList.add("selected");
-    }
+  for (let index = 0; index < limit; index++) {
+    fragment.append(renderThumbItem(photos[index], index));
+  }
 
-    if (globalIndex === state.currentIndex) {
-      button.classList.add("active");
-    }
+  if (limit < photos.length) {
+    const sentinel = document.createElement("div");
+    sentinel.className = "grid-sentinel";
+    sentinel.setAttribute("aria-hidden", "true");
+    fragment.append(sentinel);
 
-    const img = document.createElement("img");
-    img.loading = "lazy";
-    img.decoding = "async";
-    img.src = createThumbnailUrl(photo);
-    img.alt = photo.name;
-
-    if (photo.favorite) {
-      const favBadge = document.createElement("span");
-      favBadge.className = "thumb-fav-badge";
-      favBadge.textContent = "❤️";
-      button.append(favBadge);
-    }
-
-    const meta = document.createElement("span");
-    meta.className = "thumb-meta";
-    const order = document.createElement("span");
-    const date = document.createElement("span");
-    order.textContent = String(index + 1);
-    date.textContent = formatDate(photo.date).replace("年", ".").replace("月", ".").replace("日", "");
-    meta.append(order, date);
-
-    const check = document.createElement("span");
-    check.className = "thumb-check";
-    check.setAttribute("aria-hidden", "true");
-
-    button.append(img, check, meta);
-    button.addEventListener("click", () => {
-      if (state.selectionMode) {
-        if (selected) {
-          state.selectedIds.delete(photo.id);
-        } else {
-          state.selectedIds.add(photo.id);
+    if ("IntersectionObserver" in window) {
+      state.thumbObserver = new IntersectionObserver((entries) => {
+        if (entries[0]?.isIntersecting) {
+          state.renderedThumbCount = Math.min(photos.length, state.renderedThumbCount + THUMB_BATCH_SIZE);
+          renderThumbs();
         }
-        render();
-        return;
-      }
+      }, { rootMargin: "400px" });
+      state.thumbObserver.observe(sentinel);
+    }
+  }
 
-      state.currentIndex = globalIndex;
-      pauseMemory();
-      render();
-    });
-    els.thumbGrid.append(button);
-  });
+  els.thumbGrid.innerHTML = "";
+  els.thumbGrid.append(fragment);
 }
 
 function render() {
@@ -760,17 +804,33 @@ function apiUrl(path, params = {}) {
   return `${cloud.apiBaseUrl}${path}?${query.toString()}`;
 }
 
-function jpegFileName(fileName, suffix = "") {
-  const name = fileName || "memory-photo";
-  const base = name.replace(/\.[^.]+$/, "") || "memory-photo";
-  return `${base}${suffix}.jpg`;
+let isWebpSupportedCache = null;
+function checkWebpSupport() {
+  if (isWebpSupportedCache !== null) return isWebpSupportedCache;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const dataUrl = canvas.toDataURL("image/webp");
+    isWebpSupportedCache = typeof dataUrl === "string" && dataUrl.startsWith("data:image/webp");
+  } catch {
+    isWebpSupportedCache = false;
+  }
+  return isWebpSupportedCache;
 }
 
-async function createJpegDerivative(file, {
+function optimizedFileName(fileName, suffix = "", extension = "webp") {
+  const name = fileName || "memory-photo";
+  const base = name.replace(/\.[^.]+$/, "") || "memory-photo";
+  return `${base}${suffix}.${extension}`;
+}
+
+async function createOptimizedImageDerivative(file, {
   maxEdge,
   quality,
   suffix = "",
   dimensions: knownDimensions = null,
+  forceFormat = null,
 }) {
   const originalDimensions = knownDimensions || await getImageDimensions(file);
   if (!originalDimensions.width || !originalDimensions.height) return null;
@@ -794,30 +854,47 @@ async function createJpegDerivative(file, {
   const context = canvas.getContext("2d");
   context.drawImage(image, 0, 0, width, height);
 
-  const blob = await new Promise((resolve) => {
-    canvas.toBlob(resolve, "image/jpeg", quality);
+  const preferWebp = forceFormat ? forceFormat === "image/webp" : checkWebpSupport();
+  const mimeType = preferWebp ? "image/webp" : "image/jpeg";
+
+  let blob = await new Promise((resolve) => {
+    canvas.toBlob(resolve, mimeType, quality);
   });
+
+  // フォールバック
+  if (!blob && preferWebp) {
+    blob = await new Promise((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", quality);
+    });
+  }
 
   if (!blob) return null;
 
+  const finalType = blob.type || mimeType;
+  const ext = finalType.includes("webp") ? "webp" : "jpg";
+
   return {
-    file: new File([blob], jpegFileName(file.name, suffix), {
-      type: "image/jpeg",
+    file: new File([blob], optimizedFileName(file.name, suffix, ext), {
+      type: finalType,
       lastModified: file.lastModified || Date.now(),
     }),
     dimensions: { width, height },
   };
 }
 
+const createJpegDerivative = createOptimizedImageDerivative;
+
 async function optimizeImageForApi(file) {
   const originalDimensions = await getImageDimensions(file);
+  const isWebp = file.type?.toLowerCase() === "image/webp";
   const needsResize = file.size > API_OPTIMIZE_THRESHOLD_BYTES;
-  const needsFormatConversion = !API_WEB_FRIENDLY_IMAGE_TYPES.has(file.type.toLowerCase());
+  const needsFormatConversion = !isWebp && (!API_WEB_FRIENDLY_IMAGE_TYPES.has(file.type.toLowerCase()) || checkWebpSupport());
+  
   if (!originalDimensions.width || !originalDimensions.height || (!needsResize && !needsFormatConversion)) {
     return { file, dimensions: originalDimensions };
   }
 
-  return await createJpegDerivative(file, {
+  return await createOptimizedImageDerivative(file, {
     maxEdge: needsResize ? API_MAX_IMAGE_EDGE : Math.max(originalDimensions.width, originalDimensions.height),
     quality: API_IMAGE_QUALITY,
     dimensions: originalDimensions,
@@ -825,7 +902,7 @@ async function optimizeImageForApi(file) {
 }
 
 async function createThumbnailForApi(file) {
-  const thumbnail = await createJpegDerivative(file, {
+  const thumbnail = await createOptimizedImageDerivative(file, {
     maxEdge: API_THUMBNAIL_MAX_IMAGE_EDGE,
     quality: API_THUMBNAIL_QUALITY,
     suffix: "-thumb",
@@ -1693,7 +1770,7 @@ async function exportAlbumAsZip() {
         blob = await response.blob();
       }
 
-      const ext = photo.type === "image/png" ? "png" : "jpg";
+      const ext = photo.type?.includes("webp") ? "webp" : (photo.type === "image/png" ? "png" : "jpg");
       const fileName = `${String(i + 1).padStart(3, "0")}_${formatDate(photo.date).replace(/[年月日]/g, "-")}_${photo.name || "photo"}.${ext}`;
       folder.file(fileName, blob);
     }
