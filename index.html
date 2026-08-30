@@ -9,7 +9,7 @@
     <link rel="apple-touch-icon" href="icons/icon.svg">
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <title>デートのメモリー</title>
-    <link rel="stylesheet" href="styles.css?v=3">
+    <link rel="stylesheet" href="styles.css?v=4">
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
   </head>
@@ -209,6 +209,29 @@
             </div>
             <p class="share-status" id="shareStatus" role="status" aria-live="polite"></p>
           </div>
+
+          <div class="panel-section">
+            <div class="section-head">
+              <h2>プライベートロック</h2>
+              <span id="lockStatusBadge">OFF</span>
+            </div>
+            <div class="lock-panel-actions">
+              <button class="button quiet compact" id="lockConfigBtn" type="button">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                <span id="lockConfigBtnText">Face ID / ロック設定</span>
+              </button>
+              <button class="button danger compact" id="lockNowBtn" type="button" hidden>
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                今すぐロック
+              </button>
+            </div>
+          </div>
         </aside>
 
         <section class="library" aria-label="写真一覧">
@@ -253,6 +276,131 @@
           </div>
         </section>
       </main>
+
+      <!-- 🔒 ロック画面モーダル -->
+      <div class="lock-screen-modal" id="lockScreenModal" hidden>
+        <div class="lock-card">
+          <div class="lock-brand-icon">
+            <svg class="lock-main-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <p class="kicker">Private Album</p>
+          <h2>デートのメモリー</h2>
+          <p class="lock-instruction" id="lockInstruction">Face ID またはパスコードで解除</p>
+
+          <!-- Face ID / 生体認証解除ボタン -->
+          <button class="button primary large lock-bio-btn" id="lockBioBtn" type="button">
+            <svg class="faceid-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+              <path d="M9 9h.01M15 9h.01"></path>
+              <path d="M10 13c.5.5 1.5.5 2 0"></path>
+              <path d="M9 17c1.5 1 4.5 1 6 0"></path>
+            </svg>
+            Face ID でロック解除
+          </button>
+
+          <!-- PINコード入力エリア（切り替え表示） -->
+          <div class="pin-entry-container" id="pinEntryContainer" hidden>
+            <div class="pin-dots" id="pinDots">
+              <span class="pin-dot"></span>
+              <span class="pin-dot"></span>
+              <span class="pin-dot"></span>
+              <span class="pin-dot"></span>
+            </div>
+            <div class="pin-keypad" id="pinKeypad">
+              <button class="pin-key" type="button" data-key="1">1</button>
+              <button class="pin-key" type="button" data-key="2">2</button>
+              <button class="pin-key" type="button" data-key="3">3</button>
+              <button class="pin-key" type="button" data-key="4">4</button>
+              <button class="pin-key" type="button" data-key="5">5</button>
+              <button class="pin-key" type="button" data-key="6">6</button>
+              <button class="pin-key" type="button" data-key="7">7</button>
+              <button class="pin-key" type="button" data-key="8">8</button>
+              <button class="pin-key" type="button" data-key="9">9</button>
+              <button class="pin-key action" type="button" id="pinBioSwitchBtn" aria-label="Face ID">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                </svg>
+              </button>
+              <button class="pin-key" type="button" data-key="0">0</button>
+              <button class="pin-key action" type="button" id="pinDeleteBtn" aria-label="削除">⌫</button>
+            </div>
+          </div>
+
+          <!-- パスコード切り替えリンク -->
+          <button class="link-button" id="togglePinInputBtn" type="button">4桁パスコードで解除</button>
+          <p class="lock-error" id="lockErrorMsg" role="alert" hidden></p>
+        </div>
+      </div>
+
+      <!-- ⚙️ ロック設定モーダル -->
+      <div class="lock-modal" id="lockConfigModal" hidden>
+        <div class="lock-modal-card">
+          <div class="section-head">
+            <h2>プライベートロック設定</h2>
+            <button class="icon-button glass" id="closeLockConfigBtn" type="button" aria-label="閉じる">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M18 6L6 18M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+
+          <p class="modal-description">Face ID / 生体認証 または 4桁のPINコードで、アルバムを秘密に保護します。</p>
+
+          <div class="setting-row">
+            <div>
+              <strong>ロック機能</strong>
+              <p>アプリを開くときに認証を要求</p>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="lockEnabledToggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="lock-options-area" id="lockOptionsArea" hidden>
+            <div class="setting-row">
+              <div>
+                <strong>Face ID / 生体認証</strong>
+                <p id="bioStatusDesc">登録すると画面を見るだけでロック解除</p>
+              </div>
+              <button class="button primary compact" id="registerBioBtn" type="button">Face ID を登録</button>
+            </div>
+
+            <div class="setting-row">
+              <div>
+                <strong>4桁のパスコード (PIN)</strong>
+                <p>生体認証が使えないときの合言葉</p>
+              </div>
+              <button class="button quiet compact" id="changePinBtn" type="button">PINを設定・変更</button>
+            </div>
+
+            <div class="setting-row">
+              <div>
+                <strong>再ロックの猶予時間</strong>
+                <p>アプリを閉じてからロックされるまでの時間</p>
+              </div>
+              <select class="select-field" id="lockGracePeriodSelect">
+                <option value="0">すぐにロック</option>
+                <option value="300000">5分後</option>
+                <option value="900000" selected>15分後</option>
+                <option value="3600000">1時間後</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="pin-setup-form" id="pinSetupForm" hidden>
+            <h3 id="pinSetupTitle">新しい4桁PINを入力</h3>
+            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="text-field pin-input-field" id="newPinInput" placeholder="4桁の数字">
+            <div class="dialog-actions">
+              <button class="button quiet compact" id="cancelPinSetupBtn" type="button">キャンセル</button>
+              <button class="button primary compact" id="savePinSetupBtn" type="button">保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- ⏳ アップロード進捗モーダル -->
       <div class="progress-modal" id="uploadProgressModal" hidden>

@@ -103,6 +103,33 @@ const els = {
   lightboxModal: document.getElementById("lightboxModal"),
   lightboxImg: document.getElementById("lightboxImg"),
   lightboxCloseBtn: document.getElementById("lightboxCloseBtn"),
+  lockStatusBadge: document.getElementById("lockStatusBadge"),
+  lockConfigBtn: document.getElementById("lockConfigBtn"),
+  lockConfigBtnText: document.getElementById("lockConfigBtnText"),
+  lockNowBtn: document.getElementById("lockNowBtn"),
+  lockScreenModal: document.getElementById("lockScreenModal"),
+  lockInstruction: document.getElementById("lockInstruction"),
+  lockBioBtn: document.getElementById("lockBioBtn"),
+  pinEntryContainer: document.getElementById("pinEntryContainer"),
+  pinDots: document.getElementById("pinDots"),
+  pinKeypad: document.getElementById("pinKeypad"),
+  pinBioSwitchBtn: document.getElementById("pinBioSwitchBtn"),
+  pinDeleteBtn: document.getElementById("pinDeleteBtn"),
+  togglePinInputBtn: document.getElementById("togglePinInputBtn"),
+  lockErrorMsg: document.getElementById("lockErrorMsg"),
+  lockConfigModal: document.getElementById("lockConfigModal"),
+  closeLockConfigBtn: document.getElementById("closeLockConfigBtn"),
+  lockEnabledToggle: document.getElementById("lockEnabledToggle"),
+  lockOptionsArea: document.getElementById("lockOptionsArea"),
+  registerBioBtn: document.getElementById("registerBioBtn"),
+  bioStatusDesc: document.getElementById("bioStatusDesc"),
+  changePinBtn: document.getElementById("changePinBtn"),
+  lockGracePeriodSelect: document.getElementById("lockGracePeriodSelect"),
+  pinSetupForm: document.getElementById("pinSetupForm"),
+  pinSetupTitle: document.getElementById("pinSetupTitle"),
+  newPinInput: document.getElementById("newPinInput"),
+  cancelPinSetupBtn: document.getElementById("cancelPinSetupBtn"),
+  savePinSetupBtn: document.getElementById("savePinSetupBtn"),
 };
 
 function openDatabase() {
@@ -1962,6 +1989,382 @@ els.playOnThisDayBtn?.addEventListener("click", () => {
   }
 });
 
+// === 🔒 プライベートロック (Face ID / 生体認証 WebAuthn & PIN) ===
+const LOCK_CONFIG_KEY = "date-memory-lock-config";
+const LAST_UNLOCKED_KEY = "date-memory-last-unlocked";
+
+let lockConfig = {
+  enabled: false,
+  pinHash: "",
+  bioEnabled: false,
+  credentialId: "",
+  gracePeriod: 900000, // 15分
+};
+
+let currentEnteredPin = "";
+
+function loadLockConfig() {
+  try {
+    const raw = localStorage.getItem(LOCK_CONFIG_KEY);
+    if (raw) {
+      lockConfig = { ...lockConfig, ...JSON.parse(raw) };
+    }
+  } catch (e) {
+    console.warn("Lock config load failed:", e);
+  }
+}
+
+function saveLockConfig() {
+  try {
+    localStorage.setItem(LOCK_CONFIG_KEY, JSON.stringify(lockConfig));
+    updateLockUI();
+  } catch (e) {
+    console.warn("Lock config save failed:", e);
+  }
+}
+
+async function hashPin(pin) {
+  const enc = new TextEncoder().encode(pin + "_date_memory_salt_2026");
+  const digest = await crypto.subtle.digest("SHA-256", enc);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function isBiometricsSupported() {
+  return Boolean(window.PublicKeyCredential && navigator.credentials);
+}
+
+function bufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToBuffer(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+async function registerBiometrics() {
+  if (!isBiometricsSupported()) {
+    alert("この端末・ブラウザは生体認証（Face ID / Touch ID）に対応していません。");
+    return false;
+  }
+
+  try {
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const userId = crypto.getRandomValues(new Uint8Array(16));
+    const cred = await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: { name: "デートのメモリー", id: window.location.hostname },
+        user: {
+          id: userId,
+          name: "date-memory-user",
+          displayName: "デートのメモリー",
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: "public-key" },
+          { alg: -257, type: "public-key" }
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform",
+          userVerification: "required",
+        },
+        timeout: 60000,
+      }
+    });
+
+    if (cred) {
+      lockConfig.bioEnabled = true;
+      lockConfig.credentialId = bufferToBase64(cred.rawId);
+      saveLockConfig();
+      alert("✅ Face ID / 生体認証を登録しました！次回から画面を見るだけで解除できます。");
+      return true;
+    }
+  } catch (err) {
+    console.warn("Biometrics registration cancelled or failed:", err);
+    if (err.name !== "NotAllowedError") {
+      alert("生体認証の登録に失敗しました: " + (err.message || err.name));
+    }
+  }
+  return false;
+}
+
+async function authenticateBiometrics() {
+  if (!lockConfig.bioEnabled || !isBiometricsSupported()) {
+    showPinEntry();
+    return false;
+  }
+
+  showLockError("");
+  try {
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const getOptions = {
+      publicKey: {
+        challenge,
+        rpId: window.location.hostname,
+        userVerification: "required",
+        timeout: 60000,
+      }
+    };
+
+    if (lockConfig.credentialId) {
+      getOptions.publicKey.allowCredentials = [{
+        id: base64ToBuffer(lockConfig.credentialId),
+        type: "public-key",
+        transports: ["internal"],
+      }];
+    }
+
+    const assertion = await navigator.credentials.get(getOptions);
+    if (assertion) {
+      unlockApp();
+      return true;
+    }
+  } catch (err) {
+    console.warn("Biometrics authentication failed/cancelled:", err);
+    showLockError("Face ID がキャンセルされました。パスコードで解除してください。");
+    showPinEntry();
+  }
+  return false;
+}
+
+function updateLockUI() {
+  if (els.lockStatusBadge) {
+    els.lockStatusBadge.textContent = lockConfig.enabled ? "ON" : "OFF";
+    els.lockStatusBadge.style.color = lockConfig.enabled ? "var(--accent)" : "var(--muted)";
+  }
+  if (els.lockNowBtn) {
+    els.lockNowBtn.hidden = !lockConfig.enabled;
+  }
+  if (els.lockEnabledToggle) {
+    els.lockEnabledToggle.checked = lockConfig.enabled;
+  }
+  if (els.lockOptionsArea) {
+    els.lockOptionsArea.hidden = !lockConfig.enabled;
+  }
+  if (els.bioStatusDesc) {
+    els.bioStatusDesc.textContent = lockConfig.bioEnabled ? "✅ Face ID / 生体認証 設定済み" : "登録すると画面を見るだけでロック解除";
+  }
+  if (els.registerBioBtn) {
+    els.registerBioBtn.textContent = lockConfig.bioEnabled ? "Face ID を再登録" : "Face ID を登録";
+  }
+  if (els.lockGracePeriodSelect) {
+    els.lockGracePeriodSelect.value = String(lockConfig.gracePeriod ?? 900000);
+  }
+}
+
+function showLockScreen() {
+  if (!lockConfig.enabled || (!lockConfig.pinHash && !lockConfig.bioEnabled)) return;
+  
+  if (els.lockScreenModal) {
+    els.lockScreenModal.hidden = false;
+    currentEnteredPin = "";
+    updatePinDots();
+    showLockError("");
+
+    if (lockConfig.bioEnabled) {
+      els.lockBioBtn.hidden = false;
+      els.pinEntryContainer.hidden = true;
+      els.togglePinInputBtn.textContent = "4桁パスコードで解除";
+      els.togglePinInputBtn.hidden = false;
+      // 開いた瞬間に Face ID を自動起動
+      setTimeout(() => {
+        authenticateBiometrics();
+      }, 300);
+    } else {
+      showPinEntry();
+      els.togglePinInputBtn.hidden = true;
+    }
+  }
+}
+
+function showPinEntry() {
+  if (els.lockBioBtn) els.lockBioBtn.hidden = true;
+  if (els.pinEntryContainer) els.pinEntryContainer.hidden = false;
+  if (els.togglePinInputBtn) {
+    els.togglePinInputBtn.textContent = lockConfig.bioEnabled ? "Face ID で解除に戻る" : "";
+    els.togglePinInputBtn.hidden = !lockConfig.bioEnabled;
+  }
+  currentEnteredPin = "";
+  updatePinDots();
+}
+
+function unlockApp() {
+  if (els.lockScreenModal) {
+    els.lockScreenModal.hidden = true;
+  }
+  sessionStorage.setItem(LAST_UNLOCKED_KEY, String(Date.now()));
+  localStorage.setItem(LAST_UNLOCKED_KEY, String(Date.now()));
+}
+
+function lockAppNow() {
+  sessionStorage.removeItem(LAST_UNLOCKED_KEY);
+  localStorage.removeItem(LAST_UNLOCKED_KEY);
+  showLockScreen();
+}
+
+function checkAppLockOnResume() {
+  if (!lockConfig.enabled) return;
+  if (!lockConfig.pinHash && !lockConfig.bioEnabled) return;
+  const lastTime = Number(sessionStorage.getItem(LAST_UNLOCKED_KEY) || localStorage.getItem(LAST_UNLOCKED_KEY) || 0);
+  const now = Date.now();
+  const grace = lockConfig.gracePeriod ?? 900000;
+
+  if (!lastTime || (now - lastTime > grace)) {
+    showLockScreen();
+  }
+}
+
+function updatePinDots() {
+  if (!els.pinDots) return;
+  const dots = els.pinDots.querySelectorAll(".pin-dot");
+  dots.forEach((dot, idx) => {
+    dot.classList.toggle("filled", idx < currentEnteredPin.length);
+  });
+}
+
+function showLockError(msg) {
+  if (els.lockErrorMsg) {
+    els.lockErrorMsg.textContent = msg;
+    els.lockErrorMsg.hidden = !msg;
+  }
+}
+
+async function handlePinInput(digit) {
+  if (currentEnteredPin.length >= 4) return;
+  currentEnteredPin += digit;
+  updatePinDots();
+  showLockError("");
+
+  if (currentEnteredPin.length === 4) {
+    const hashed = await hashPin(currentEnteredPin);
+    if (hashed === lockConfig.pinHash) {
+      unlockApp();
+    } else {
+      showLockError("パスコードが違います");
+      if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
+      setTimeout(() => {
+        currentEnteredPin = "";
+        updatePinDots();
+      }, 400);
+    }
+  }
+}
+
+// ロック設定モーダル
+function openLockConfigModal() {
+  if (!els.lockConfigModal) return;
+  loadLockConfig();
+  updateLockUI();
+  if (els.pinSetupForm) els.pinSetupForm.hidden = true;
+  els.lockConfigModal.hidden = false;
+}
+
+function closeLockConfigModal() {
+  if (!els.lockConfigModal) return;
+  els.lockConfigModal.hidden = true;
+}
+
+// PIN設定開始
+function startPinSetup() {
+  if (!els.pinSetupForm) return;
+  els.pinSetupForm.hidden = false;
+  if (els.newPinInput) {
+    els.newPinInput.value = "";
+    els.newPinInput.focus();
+  }
+}
+
+async function savePinSetup() {
+  const pin = els.newPinInput?.value.trim();
+  if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+    alert("4桁の半角数字を入力してください。");
+    return;
+  }
+
+  lockConfig.pinHash = await hashPin(pin);
+  lockConfig.enabled = true;
+  saveLockConfig();
+  els.pinSetupForm.hidden = true;
+  alert("✅ 4桁PINを設定し、プライベートロックを有効にしました！");
+}
+
+// ロック関連イベントリスナー登録
+els.lockConfigBtn?.addEventListener("click", openLockConfigModal);
+els.closeLockConfigBtn?.addEventListener("click", closeLockConfigModal);
+els.lockNowBtn?.addEventListener("click", lockAppNow);
+els.lockBioBtn?.addEventListener("click", () => authenticateBiometrics());
+els.pinBioSwitchBtn?.addEventListener("click", () => authenticateBiometrics());
+
+els.togglePinInputBtn?.addEventListener("click", () => {
+  if (els.pinEntryContainer.hidden) {
+    showPinEntry();
+  } else {
+    els.lockBioBtn.hidden = false;
+    els.pinEntryContainer.hidden = true;
+    els.togglePinInputBtn.textContent = "4桁パスコードで解除";
+    authenticateBiometrics();
+  }
+});
+
+els.pinKeypad?.querySelectorAll(".pin-key[data-key]").forEach((btn) => {
+  btn.addEventListener("click", () => handlePinInput(btn.dataset.key));
+});
+
+els.pinDeleteBtn?.addEventListener("click", () => {
+  if (currentEnteredPin.length > 0) {
+    currentEnteredPin = currentEnteredPin.slice(0, -1);
+    updatePinDots();
+    showLockError("");
+  }
+});
+
+els.lockEnabledToggle?.addEventListener("change", (e) => {
+  if (e.target.checked) {
+    if (!lockConfig.pinHash && !lockConfig.bioEnabled) {
+      startPinSetup();
+    } else {
+      lockConfig.enabled = true;
+      saveLockConfig();
+    }
+  } else {
+    lockConfig.enabled = false;
+    saveLockConfig();
+  }
+});
+
+els.registerBioBtn?.addEventListener("click", async () => {
+  const ok = await registerBiometrics();
+  if (ok && !lockConfig.pinHash) {
+    startPinSetup();
+  }
+});
+
+els.changePinBtn?.addEventListener("click", startPinSetup);
+els.savePinSetupBtn?.addEventListener("click", savePinSetup);
+els.cancelPinSetupBtn?.addEventListener("click", () => {
+  if (els.pinSetupForm) els.pinSetupForm.hidden = true;
+});
+
+els.lockGracePeriodSelect?.addEventListener("change", (e) => {
+  lockConfig.gracePeriod = Number(e.target.value);
+  saveLockConfig();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    checkAppLockOnResume();
+  }
+});
+
 els.syncNowBtn?.addEventListener("click", syncLocalPhotosToCloud);
 
 els.selectModeBtn.addEventListener("click", () => {
@@ -1987,4 +2390,7 @@ initSwipeControls();
 initPwa();
 
 applyPreferences();
+loadLockConfig();
+updateLockUI();
+checkAppLockOnResume();
 loadInitialPhotos();
