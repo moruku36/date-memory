@@ -387,7 +387,19 @@ body.theme-dark .play-button {
   border-radius: 8px;
   filter: var(--stage-filter);
   box-shadow: 0 24px 78px rgba(0, 0, 0, 0.36);
-  animation: kenburns 7.5s ease-in-out both;
+  animation: photoFadeIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both, kenburns 8.5s ease-in-out both;
+  transition: opacity 0.5s ease;
+}
+
+@keyframes photoFadeIn {
+  from {
+    opacity: 0.15;
+    transform: scale(0.988);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .hero-photo.portrait img {

@@ -19,13 +19,15 @@ const API_WEB_FRIENDLY_IMAGE_TYPES = new Set([
   "image/webp",
 ]);
 
+let initialPhotoSelectedId = null;
+
 const state = {
   photos: [],
   currentIndex: 0,
   activeCollection: "all",
   isPlaying: false,
   timer: null,
-  speed: 4000,
+  speed: 5000,
   view: "mosaic",
   mood: "cinema",
   selectionMode: false,
@@ -319,7 +321,13 @@ function restoreCachedCloudPhotos({ keepLocal = true } = {}) {
 
   state.photos = [...cachedPhotos, ...unsyncedLocal];
   state.activeCollection = "all";
-  setRandomCurrentIndex();
+  if (!initialPhotoSelectedId) {
+    setRandomCurrentIndex();
+    initialPhotoSelectedId = state.photos[state.currentIndex]?.id;
+  } else {
+    const existingIdx = state.photos.findIndex((p) => p.id === initialPhotoSelectedId);
+    if (existingIdx >= 0) state.currentIndex = existingIdx;
+  }
   render();
   updateSyncStatus("前回の写真を先に表示しながら、最新状態を確認しています。");
   return true;
@@ -1109,15 +1117,16 @@ async function loadCloudPhotos({ keepLocal = true } = {}) {
         ? localOnlyPhotos().filter((photo) => !cloudIds.has(photo.id))
         : [];
 
-      const prevCurrentId = state.photos[state.currentIndex]?.id;
+      const targetId = initialPhotoSelectedId || state.photos[state.currentIndex]?.id;
       revokePhotoUrls();
       state.photos = [...cloudPhotos, ...unsyncedLocal];
       state.activeCollection = "all";
-      const existingIdx = prevCurrentId ? state.photos.findIndex((photo) => photo.id === prevCurrentId) : -1;
+      const existingIdx = targetId ? state.photos.findIndex((photo) => photo.id === targetId) : -1;
       if (existingIdx >= 0) {
         state.currentIndex = existingIdx;
       } else {
         setRandomCurrentIndex();
+        initialPhotoSelectedId = state.photos[state.currentIndex]?.id;
       }
       writeCloudPhotoCache(cloudPhotos);
       render();
@@ -1150,15 +1159,16 @@ async function loadCloudPhotos({ keepLocal = true } = {}) {
       ? localOnlyPhotos().filter((photo) => !cloudIds.has(photo.id))
       : [];
 
-    const prevCurrentId = state.photos[state.currentIndex]?.id;
+    const targetId = initialPhotoSelectedId || state.photos[state.currentIndex]?.id;
     revokePhotoUrls();
     state.photos = [...cloudPhotos, ...unsyncedLocal];
     state.activeCollection = "all";
-    const existingIdx = prevCurrentId ? state.photos.findIndex((photo) => photo.id === prevCurrentId) : -1;
+    const existingIdx = targetId ? state.photos.findIndex((photo) => photo.id === targetId) : -1;
     if (existingIdx >= 0) {
       state.currentIndex = existingIdx;
     } else {
       setRandomCurrentIndex();
+      initialPhotoSelectedId = state.photos[state.currentIndex]?.id;
     }
     render();
     updateSyncStatus(unsyncedLocal.length ? `${cloudPhotos.length}枚を同期済み、${unsyncedLocal.length}枚はこの端末のみです。` : `${cloudPhotos.length}枚をクラウドから表示しています。`);
@@ -1607,7 +1617,10 @@ async function loadInitialPhotos() {
     state.photos = [];
   }
   sortPhotos();
-  setRandomCurrentIndex();
+  if (!initialPhotoSelectedId && state.photos.length > 0) {
+    setRandomCurrentIndex();
+    initialPhotoSelectedId = state.photos[state.currentIndex]?.id;
+  }
   render();
   updateSyncStatus();
 
@@ -1656,6 +1669,10 @@ function applyPreferences() {
     els.speedRange.value = preferences.speed;
     state.speed = Number(preferences.speed) * 1000;
     els.speedValue.textContent = `${preferences.speed}秒`;
+  } else {
+    els.speedRange.value = "5";
+    state.speed = 5000;
+    els.speedValue.textContent = "5秒";
   }
   if (preferences.themeDark) document.body.classList.add("theme-dark");
   applyMood(preferences.mood || "cinema");
