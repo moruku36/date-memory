@@ -613,9 +613,19 @@ function renderHero() {
   const current = state.photos[state.currentIndex] || state.photos[0];
   const url = createPhotoUrl(current);
   const backgroundUrl = createThumbnailUrl(current) || url;
-  els.currentPhoto.src = url;
-  els.currentPhoto.alt = current.name;
-  els.currentPhoto.decoding = "async";
+
+  const isSamePhoto = els.currentPhoto.dataset.photoId === current.id;
+  if (!isSamePhoto) {
+    els.currentPhoto.dataset.photoId = current.id;
+    els.currentPhoto.src = url;
+    els.currentPhoto.alt = current.name;
+    els.currentPhoto.decoding = "async";
+    els.currentPhoto.style.animation = "none";
+    requestAnimationFrame(() => {
+      els.currentPhoto.style.animation = "";
+    });
+  }
+
   els.stageBg.style.backgroundImage = `linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.34)), url("${backgroundUrl}")`;
   els.memoryDate.textContent = formatDate(current.date);
   els.memoryTitle.textContent = els.albumName.value.trim() || DEFAULT_ALBUM_NAME;
@@ -654,11 +664,6 @@ function renderHero() {
   if (current.width && current.height) {
     els.heroPhoto.classList.add(current.height > current.width ? "portrait" : "landscape");
   }
-
-  els.currentPhoto.style.animation = "none";
-  requestAnimationFrame(() => {
-    els.currentPhoto.style.animation = "";
-  });
 }
 
 function renderThumbItem(photo, index) {
