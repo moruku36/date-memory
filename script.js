@@ -318,8 +318,8 @@ function restoreCachedCloudPhotos({ keepLocal = true } = {}) {
     : [];
 
   state.photos = [...cachedPhotos, ...unsyncedLocal];
-  state.currentIndex = 0;
   state.activeCollection = "all";
+  setRandomCurrentIndex();
   render();
   updateSyncStatus("前回の写真を先に表示しながら、最新状態を確認しています。");
   return true;
@@ -488,6 +488,18 @@ function setCurrentByVisibleIndex(index) {
   render();
 }
 
+function setRandomCurrentIndex() {
+  const photos = visiblePhotos();
+  if (!photos.length) {
+    state.currentIndex = 0;
+    return;
+  }
+  const randomIndex = Math.floor(Math.random() * photos.length);
+  const chosen = photos[randomIndex];
+  state.currentIndex = state.photos.findIndex((photo) => photo.id === chosen.id);
+  if (state.currentIndex < 0) state.currentIndex = 0;
+}
+
 function buildCollections() {
   const collections = [
     { id: "all", label: "すべての写真", count: state.photos.length, cover: state.photos[0] },
@@ -563,8 +575,13 @@ function renderCollections() {
     button.addEventListener("click", () => {
       state.activeCollection = collection.id;
       state.renderedThumbCount = THUMB_BATCH_SIZE;
-      const first = collection.id === "all" ? state.photos[0] : state.photos.find((photo) => formatMonth(photo.date) === collection.id);
-      state.currentIndex = Math.max(0, state.photos.findIndex((photo) => photo.id === first?.id));
+      if (collection.id === "all") {
+        setRandomCurrentIndex();
+      } else {
+        const visible = visiblePhotos();
+        const first = visible[0];
+        state.currentIndex = Math.max(0, state.photos.findIndex((photo) => photo.id === first?.id));
+      }
       render();
     });
     els.collectionList.append(button);
@@ -1092,10 +1109,16 @@ async function loadCloudPhotos({ keepLocal = true } = {}) {
         ? localOnlyPhotos().filter((photo) => !cloudIds.has(photo.id))
         : [];
 
+      const prevCurrentId = state.photos[state.currentIndex]?.id;
       revokePhotoUrls();
       state.photos = [...cloudPhotos, ...unsyncedLocal];
-      state.currentIndex = 0;
       state.activeCollection = "all";
+      const existingIdx = prevCurrentId ? state.photos.findIndex((photo) => photo.id === prevCurrentId) : -1;
+      if (existingIdx >= 0) {
+        state.currentIndex = existingIdx;
+      } else {
+        setRandomCurrentIndex();
+      }
       writeCloudPhotoCache(cloudPhotos);
       render();
       updateSyncStatus(unsyncedLocal.length ? `${cloudPhotos.length}枚を同期済み、${unsyncedLocal.length}枚はこの端末のみです。` : `${cloudPhotos.length}枚をクラウドから表示しています。`);
@@ -1127,10 +1150,16 @@ async function loadCloudPhotos({ keepLocal = true } = {}) {
       ? localOnlyPhotos().filter((photo) => !cloudIds.has(photo.id))
       : [];
 
+    const prevCurrentId = state.photos[state.currentIndex]?.id;
     revokePhotoUrls();
     state.photos = [...cloudPhotos, ...unsyncedLocal];
-    state.currentIndex = 0;
     state.activeCollection = "all";
+    const existingIdx = prevCurrentId ? state.photos.findIndex((photo) => photo.id === prevCurrentId) : -1;
+    if (existingIdx >= 0) {
+      state.currentIndex = existingIdx;
+    } else {
+      setRandomCurrentIndex();
+    }
     render();
     updateSyncStatus(unsyncedLocal.length ? `${cloudPhotos.length}枚を同期済み、${unsyncedLocal.length}枚はこの端末のみです。` : `${cloudPhotos.length}枚をクラウドから表示しています。`);
   } catch (error) {
@@ -1578,6 +1607,7 @@ async function loadInitialPhotos() {
     state.photos = [];
   }
   sortPhotos();
+  setRandomCurrentIndex();
   render();
   updateSyncStatus();
 
