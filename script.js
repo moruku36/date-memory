@@ -23,7 +23,7 @@ let initialPhotoSelectedId = null;
 
 const state = {
   photos: [],
-  currentIndex: 0,
+  currentIndex: -1,
   activeCollection: "all",
   isPlaying: false,
   timer: null,
@@ -610,6 +610,10 @@ function renderHero() {
     return;
   }
 
+  if (state.currentIndex < 0 || state.currentIndex >= state.photos.length) {
+    state.currentIndex = Math.floor(Math.random() * state.photos.length);
+  }
+
   const current = state.photos[state.currentIndex] || state.photos[0];
   const url = createPhotoUrl(current);
   const backgroundUrl = createThumbnailUrl(current) || url;
@@ -786,6 +790,14 @@ function renderThumbs() {
 }
 
 function render() {
+  const photos = visiblePhotos();
+  if (photos.length > 0 && (state.currentIndex < 0 || state.currentIndex >= state.photos.length)) {
+    const randomIndex = Math.floor(Math.random() * photos.length);
+    const chosen = photos[randomIndex];
+    state.currentIndex = state.photos.findIndex((p) => p.id === chosen.id);
+    if (state.currentIndex < 0) state.currentIndex = 0;
+  }
+
   const current = state.photos[state.currentIndex];
   sortPhotos();
   pruneSelection();
@@ -793,7 +805,9 @@ function render() {
     const nextIndex = state.photos.findIndex((photo) => photo.id === current.id);
     if (nextIndex >= 0) state.currentIndex = nextIndex;
   }
-  if (state.currentIndex >= state.photos.length) state.currentIndex = 0;
+  if (state.photos.length > 0 && (state.currentIndex < 0 || state.currentIndex >= state.photos.length)) {
+    state.currentIndex = 0;
+  }
 
   renderHero();
   renderCollections();
