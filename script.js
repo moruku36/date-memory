@@ -114,6 +114,7 @@ const els = {
   mapPinCount: document.getElementById("mapPinCount"),
   inlineMapContainer: document.getElementById("datingMapCanvas"),
   inlineMapPinCount: document.getElementById("inlineMapPinCount"),
+  mapResyncBtn: document.getElementById("mapResyncBtn"),
   mapResetViewBtn: document.getElementById("mapResetViewBtn"),
   infoModal: document.getElementById("infoModal"),
   infoCloseBtn: document.getElementById("infoCloseBtn"),
@@ -2425,6 +2426,45 @@ function resetInlineMapView() {
   inlineMapInstance.setView(KANTO_CENTER, KANTO_DEFAULT_ZOOM, { animate: true });
 }
 
+async function resyncMapLocations() {
+  if (els.mapResyncBtn) {
+    els.mapResyncBtn.disabled = true;
+    els.mapResyncBtn.textContent = "同期中...";
+  }
+
+  try {
+    // 1. 古いキャッシュをクリア
+    clearCloudPhotoCache();
+
+    // 2. クラウド（MongoDB）から最新の位置情報を強制再取得
+    if (cloud.ready) {
+      await loadCloudPhotos({ keepLocal: false });
+    }
+
+    // 3. メモリ内の写真にも日付ベースの最新マッピングを適用
+    assignFallbackLocationsIfNeeded(state.photos);
+
+    // 4. 地図ピンを再描画
+    updateInlineMap();
+    resetInlineMapView();
+
+    showBgmToast("📍 位置情報を最新スポットに再同期しました！");
+  } catch (error) {
+    console.error("Resync map failed:", error);
+    showBgmToast("位置情報の再同期に失敗しました");
+  } finally {
+    if (els.mapResyncBtn) {
+      els.mapResyncBtn.disabled = false;
+      els.mapResyncBtn.innerHTML = `
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+        </svg>
+        🔄 位置情報を再同期
+      `;
+    }
+  }
+}
+
 function openDateMap() {
   if (!els.mapModal) return;
   pauseMemory();
@@ -3060,7 +3100,7 @@ els.restoreSelectedBtn?.addEventListener("click", restoreSelectedPhotos);
 els.mapOpenBtn?.addEventListener("click", openDateMap);
 els.mapOpenSideBtn?.addEventListener("click", openDateMap);
 els.mapOverlayBtn?.addEventListener("click", openDateMap);
-els.mapGalleryBtn?.addEventListener("click", openDateMap);
+els.mapResyncBtn?.addEventListener("click", resyncMapLocations);
 els.mapResetViewBtn?.addEventListener("click", resetInlineMapView);
 els.mapCloseBtn?.addEventListener("click", closeDateMap);
 els.mapModal?.addEventListener("click", (e) => {
