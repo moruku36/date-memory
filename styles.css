@@ -272,8 +272,7 @@ body.theme-dark .play-button {
   grid-template-columns: minmax(0, 1fr) 320px;
   grid-template-areas:
     "stage side"
-    "library side"
-    "map map";
+    "library side";
   gap: 18px;
   max-width: 1440px;
   margin: 0 auto;
@@ -881,8 +880,7 @@ body.mood-night {
     grid-template-areas:
       "stage"
       "side"
-      "library"
-      "map";
+      "library";
   }
 
   .side-panel {
@@ -1671,7 +1669,9 @@ body.theater-mode .memory-stage {
 
 /* 🗺️ ふたりのデートマップ (インライン常時表示セクション) */
 .dating-map-section {
-  grid-area: map;
+  width: 100%;
+  max-width: 1440px;
+  margin: 18px auto 0;
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -1680,7 +1680,7 @@ body.theater-mode .memory-stage {
   flex-direction: column;
   gap: 12px;
   box-shadow: var(--shadow);
-  margin-top: 4px;
+  box-sizing: border-box;
 }
 
 .dating-map-head {

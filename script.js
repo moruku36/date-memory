@@ -2283,35 +2283,54 @@ let inlineMarkersGroup = null;
 const KANTO_CENTER = [35.6812, 139.7671]; // 東京・丸の内
 const KANTO_DEFAULT_ZOOM = 10; // 東京、神奈川、埼玉がすっきり収まるズームレベル
 
-// 関東圏の思い出スポット（Exif位置情報がない既存写真への安全なフォールバック用）
-const KANTO_FALLBACK_SPOTS = [
-  { name: "渋谷・表参道", lat: 35.6628, lng: 139.7038 },
-  { name: "新宿御苑", lat: 35.6852, lng: 139.7100 },
+// 📅 デート日（YYYY-MM-DD）ごとの正確な訪問スポット定義
+const DATE_SPOT_MAP = {
+  "2026-05-16": { name: "三浦半島・城ヶ島・三崎港", lat: 35.1365, lng: 139.6190 },
+  "2026-05-23": { name: "ICU（国際基督教大学・三鷹）", lat: 35.6882, lng: 139.5303 },
+  "2026-05-24": { name: "ICU（国際基督教大学・三鷹）", lat: 35.6882, lng: 139.5303 },
+  "2026-05-30": { name: "さいたま（大宮 花の丘農林公園・与野ばら園）", lat: 35.9550, lng: 139.5850 },
+  "2026-06-06": { name: "吉祥寺・井の頭自然文化園", lat: 35.7001, lng: 139.5744 },
+  "2026-06-13": { name: "神楽坂・飯田橋", lat: 35.7018, lng: 139.7408 },
+  "2026-06-21": { name: "恵比寿ガーデンプレイス・公園", lat: 35.6425, lng: 139.7135 },
+  "2026-06-28": { name: "帝国ホテル 東京・日比谷", lat: 35.6725, lng: 139.7588 },
+  "2026-07-11": { name: "銀座・丸の内", lat: 35.6715, lng: 139.7650 },
+  "2026-07-12": { name: "銀座・丸の内", lat: 35.6715, lng: 139.7650 },
+  "2026-07-25": { name: "おうちデート（吉祥寺）", lat: 35.7030, lng: 139.5800 },
+  "2026-08-01": { name: "中目黒・代官山カフェ", lat: 35.6441, lng: 139.6988 },
+  "2026-08-02": { name: "中目黒・代官山カフェ", lat: 35.6441, lng: 139.6988 },
+  "2026-08-16": { name: "横浜赤レンガ倉庫・みなとみらい", lat: 35.4528, lng: 139.6428 },
+  "2026-08-23": { name: "ワーナーブラザース スタジオツアー東京（としまえん）", lat: 35.7447, lng: 139.6480 },
+  "2026-08-29": { name: "高円寺阿波おどり（高円寺）", lat: 35.7053, lng: 139.6497 },
+  "2026-08-30": { name: "横浜・馬車道ディナー", lat: 35.4490, lng: 139.6360 },
+};
+
+const DEFAULT_FALLBACK_SPOTS = [
   { name: "東京駅・丸の内", lat: 35.6812, lng: 139.7671 },
-  { name: "お台場海浜公園", lat: 35.6298, lng: 139.7745 },
-  { name: "浅草・スカイツリー", lat: 35.7118, lng: 139.7967 },
+  { name: "渋谷・表参道", lat: 35.6628, lng: 139.7038 },
   { name: "吉祥寺・井の頭公園", lat: 35.7001, lng: 139.5794 },
-  { name: "六本木ヒルズ", lat: 35.6628, lng: 139.7314 },
-  { name: "上野公園", lat: 35.7140, lng: 139.7741 },
   { name: "横浜みなとみらい", lat: 35.4522, lng: 139.6380 },
-  { name: "山下公園・中華街", lat: 35.4439, lng: 139.6508 },
-  { name: "鎌倉・小町通り", lat: 35.3240, lng: 139.5550 },
-  { name: "由比ヶ浜海岸", lat: 35.3110, lng: 139.5440 },
-  { name: "江の島・湘南", lat: 35.3005, lng: 139.4811 },
-  { name: "武蔵小杉", lat: 35.5750, lng: 139.6598 },
-  { name: "大宮・氷川神社", lat: 35.9168, lng: 139.6297 },
-  { name: "さいたま新都心", lat: 35.8943, lng: 139.6318 },
-  { name: "川越・小江戸", lat: 35.9238, lng: 139.4854 },
-  { name: "越谷レイクタウン", lat: 35.8790, lng: 139.8245 },
 ];
 
 function assignFallbackLocationsIfNeeded(photos) {
   if (!Array.isArray(photos)) return;
   photos.forEach((photo, idx) => {
-    if (!photo.location || typeof photo.location.lat !== "number" || typeof photo.location.lng !== "number") {
-      const spot = KANTO_FALLBACK_SPOTS[idx % KANTO_FALLBACK_SPOTS.length];
-      const jitterLat = ((idx * 13) % 20 - 10) * 0.0025;
-      const jitterLng = ((idx * 17) % 20 - 10) * 0.0025;
+    const rawDate = photo.date || photo.createdAt;
+    let dateKey = "";
+    if (rawDate) {
+      const num = Number(rawDate);
+      const dateObj = new Date(!isNaN(num) && num < 1e11 ? num * 1000 : rawDate);
+      if (!isNaN(dateObj.getTime())) {
+        dateKey = dateObj.toISOString().slice(0, 10);
+      }
+    }
+
+    const spot = DATE_SPOT_MAP[dateKey] || DEFAULT_FALLBACK_SPOTS[idx % DEFAULT_FALLBACK_SPOTS.length];
+    const isMissingLocation = !photo.location || typeof photo.location.lat !== "number" || typeof photo.location.lng !== "number";
+    const isKnownMismatch = DATE_SPOT_MAP[dateKey] && (!photo.location?.spotName || photo.location.spotName !== spot.name);
+
+    if (isMissingLocation || isKnownMismatch) {
+      const jitterLat = ((idx * 13) % 20 - 10) * 0.0012;
+      const jitterLng = ((idx * 17) % 20 - 10) * 0.0012;
       photo.location = {
         lat: +(spot.lat + jitterLat).toFixed(6),
         lng: +(spot.lng + jitterLng).toFixed(6),
@@ -2508,7 +2527,15 @@ function openPhotoInfo() {
       els.infoShowOnMapBtn.hidden = false;
       els.infoShowOnMapBtn.onclick = () => {
         closePhotoInfo();
-        openDateMap();
+        const mapSection = document.getElementById("datingMapSection");
+        if (mapSection) {
+          mapSection.scrollIntoView({ behavior: "smooth", block: "start" });
+          if (inlineMapInstance && current.location) {
+            inlineMapInstance.setView([current.location.lat, current.location.lng], 14, { animate: true });
+          }
+        } else {
+          openDateMap();
+        }
       };
     } else {
       els.infoLocationText.textContent = "位置情報なし";
