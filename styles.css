@@ -272,7 +272,8 @@ body.theme-dark .play-button {
   grid-template-columns: minmax(0, 1fr) 320px;
   grid-template-areas:
     "stage side"
-    "library side";
+    "library side"
+    "map map";
   gap: 18px;
   max-width: 1440px;
   margin: 0 auto;
@@ -880,7 +881,8 @@ body.mood-night {
     grid-template-areas:
       "stage"
       "side"
-      "library";
+      "library"
+      "map";
   }
 
   .side-panel {
@@ -1665,6 +1667,73 @@ body.theater-mode .memory-stage {
   text-align: center;
   font-size: 1.5rem;
   letter-spacing: 0.5em;
+}
+
+/* 🗺️ ふたりのデートマップ (インライン常時表示セクション) */
+.dating-map-section {
+  grid-area: map;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow);
+  margin-top: 4px;
+}
+
+.dating-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dating-map-head h2 {
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+
+.dating-map-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dating-map-badge {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent), transparent 90%);
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--accent), transparent 75%);
+}
+
+.dating-map-hint {
+  font-size: 0.86rem;
+  color: var(--muted);
+  line-height: 1.4;
+  margin-top: -4px;
+}
+
+.dating-map-frame {
+  width: 100%;
+  height: 480px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #e5e3df;
+  position: relative;
+  z-index: 1;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.dating-map-canvas {
+  width: 100%;
+  height: 100%;
 }
 
 /* 🗺️ ふたりのデートマップモーダル */

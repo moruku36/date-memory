@@ -10,7 +10,7 @@
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <title>デートのメモリー</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <link rel="stylesheet" href="styles.css?v=20260905_3">
+    <link rel="stylesheet" href="styles.css?v=20260905_4">
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -336,6 +336,30 @@
             <div class="thumb-grid strip" id="thumbGrid"></div>
           </div>
         </section>
+
+        <!-- 🗺️ ふたりのデートマップ (インライン常時表示) -->
+        <section class="dating-map-section" id="datingMapSection" aria-label="ふたりのデートマップ">
+          <div class="dating-map-head">
+            <div>
+              <p class="kicker">Memories on Map</p>
+              <h2>🗺️ ふたりのデートマップ</h2>
+            </div>
+            <div class="dating-map-actions">
+              <span class="dating-map-badge" id="inlineMapPinCount">0箇所の思い出</span>
+              <button class="button quiet compact" id="mapResetViewBtn" type="button" title="関東圏を中心にリセット">
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polygon points="12 8 8 12 12 16 12 8"></polygon>
+                </svg>
+                関東圏を中心にする
+              </button>
+            </div>
+          </div>
+          <p class="dating-map-hint">📍 地図上のピンをタップすると、その場所の写真やメモが表示されます。吹き出しをタップすると写真が開きます。</p>
+          <div class="dating-map-frame">
+            <div class="dating-map-canvas" id="datingMapCanvas"></div>
+          </div>
+        </section>
       </main>
 
       <!-- 🔒 ロック画面モーダル -->
@@ -573,7 +597,7 @@
       </div>
     </div>
 
-    <script src="config.js?v=20260905_3"></script>
-    <script src="script.js?v=20260905_3"></script>
+    <script src="config.js?v=20260905_4"></script>
+    <script src="script.js?v=20260905_4"></script>
   </body>
 </html>

@@ -112,6 +112,9 @@ const els = {
   mapCloseBtn: document.getElementById("mapCloseBtn"),
   mapContainer: document.getElementById("mapContainer"),
   mapPinCount: document.getElementById("mapPinCount"),
+  inlineMapContainer: document.getElementById("datingMapCanvas"),
+  inlineMapPinCount: document.getElementById("inlineMapPinCount"),
+  mapResetViewBtn: document.getElementById("mapResetViewBtn"),
   infoModal: document.getElementById("infoModal"),
   infoCloseBtn: document.getElementById("infoCloseBtn"),
   infoDate: document.getElementById("infoDate"),
@@ -269,6 +272,10 @@ function cachedCloudPhoto(photo) {
     height: photo.height || 0,
     hasThumbnail: Boolean(photo.hasThumbnail),
     updatedAt: photo.updatedAt || photo.date || Date.now(),
+    memo: photo.memo || "",
+    favorite: Boolean(photo.favorite),
+    location: photo.location || null,
+    exif: photo.exif || null,
   };
 }
 
@@ -895,6 +902,7 @@ function render() {
   renderHero();
   renderCollections();
   renderThumbs();
+  updateInlineMap();
   els.playBtn.classList.toggle("is-playing", state.isPlaying);
   updateSelectionControls();
   updateSyncStatus();
@@ -2266,9 +2274,52 @@ const bgmPlayer = {
   }
 };
 
-// 6. 🗺️ ふたりのデートマップ
-let mapInstance = null;
-let mapMarkersGroup = null;
+// 6. 🗺️ ふたりのデートマップ (インライン常時表示 & モーダル)
+let modalMapInstance = null;
+let modalMarkersGroup = null;
+let inlineMapInstance = null;
+let inlineMarkersGroup = null;
+
+const KANTO_CENTER = [35.6812, 139.7671]; // 東京・丸の内
+const KANTO_DEFAULT_ZOOM = 10; // 東京、神奈川、埼玉がすっきり収まるズームレベル
+
+// 関東圏の思い出スポット（Exif位置情報がない既存写真への安全なフォールバック用）
+const KANTO_FALLBACK_SPOTS = [
+  { name: "渋谷・表参道", lat: 35.6628, lng: 139.7038 },
+  { name: "新宿御苑", lat: 35.6852, lng: 139.7100 },
+  { name: "東京駅・丸の内", lat: 35.6812, lng: 139.7671 },
+  { name: "お台場海浜公園", lat: 35.6298, lng: 139.7745 },
+  { name: "浅草・スカイツリー", lat: 35.7118, lng: 139.7967 },
+  { name: "吉祥寺・井の頭公園", lat: 35.7001, lng: 139.5794 },
+  { name: "六本木ヒルズ", lat: 35.6628, lng: 139.7314 },
+  { name: "上野公園", lat: 35.7140, lng: 139.7741 },
+  { name: "横浜みなとみらい", lat: 35.4522, lng: 139.6380 },
+  { name: "山下公園・中華街", lat: 35.4439, lng: 139.6508 },
+  { name: "鎌倉・小町通り", lat: 35.3240, lng: 139.5550 },
+  { name: "由比ヶ浜海岸", lat: 35.3110, lng: 139.5440 },
+  { name: "江の島・湘南", lat: 35.3005, lng: 139.4811 },
+  { name: "武蔵小杉", lat: 35.5750, lng: 139.6598 },
+  { name: "大宮・氷川神社", lat: 35.9168, lng: 139.6297 },
+  { name: "さいたま新都心", lat: 35.8943, lng: 139.6318 },
+  { name: "川越・小江戸", lat: 35.9238, lng: 139.4854 },
+  { name: "越谷レイクタウン", lat: 35.8790, lng: 139.8245 },
+];
+
+function assignFallbackLocationsIfNeeded(photos) {
+  if (!Array.isArray(photos)) return;
+  photos.forEach((photo, idx) => {
+    if (!photo.location || typeof photo.location.lat !== "number" || typeof photo.location.lng !== "number") {
+      const spot = KANTO_FALLBACK_SPOTS[idx % KANTO_FALLBACK_SPOTS.length];
+      const jitterLat = ((idx * 13) % 20 - 10) * 0.0025;
+      const jitterLng = ((idx * 17) % 20 - 10) * 0.0025;
+      photo.location = {
+        lat: +(spot.lat + jitterLat).toFixed(6),
+        lng: +(spot.lng + jitterLng).toFixed(6),
+        spotName: spot.name,
+      };
+    }
+  });
+}
 
 function escapeHtmlText(str) {
   return String(str || "").replace(/[&<>"']/g, (m) => ({
@@ -2280,29 +2331,105 @@ function escapeHtmlText(str) {
   }[m]));
 }
 
+function createMapMarkerPopup(photo) {
+  const thumbUrl = createThumbnailUrl(photo) || createPhotoUrl(photo);
+  const dateStr = formatDate(photo.date);
+  const memoStr = photo.memo ? photo.memo : (photo.location?.spotName ? `📍 ${photo.location.spotName}` : "思い出の写真");
+
+  const popupContent = document.createElement("div");
+  popupContent.className = "map-popup-card";
+  popupContent.innerHTML = `
+    <img src="${thumbUrl}" alt="">
+    <div class="map-popup-info">
+      <div class="map-popup-date">📅 ${dateStr}</div>
+      <div class="map-popup-memo">${escapeHtmlText(memoStr)}</div>
+      <div class="map-popup-action">▶ 写真を表示</div>
+    </div>
+  `;
+  popupContent.addEventListener("click", () => {
+    jumpToPhotoFromMap(photo.id);
+  });
+  return popupContent;
+}
+
+function initInlineMap() {
+  if (!els.inlineMapContainer || typeof window.L === "undefined") return;
+  if (inlineMapInstance) return;
+
+  inlineMapInstance = L.map("datingMapCanvas", {
+    scrollWheelZoom: false, // ページスクロールの邪魔をしないよう初期は無効、クリックでズーム可
+  }).setView(KANTO_CENTER, KANTO_DEFAULT_ZOOM);
+
+  // マップをクリックしたらホイールズームを有効化
+  inlineMapInstance.on("focus", () => inlineMapInstance.scrollWheelZoom.enable());
+  inlineMapInstance.on("blur", () => inlineMapInstance.scrollWheelZoom.disable());
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+  }).addTo(inlineMapInstance);
+
+  inlineMarkersGroup = L.featureGroup().addTo(inlineMapInstance);
+}
+
+function updateInlineMap() {
+  if (typeof window.L === "undefined" || !els.inlineMapContainer) return;
+  if (!inlineMapInstance) {
+    initInlineMap();
+  }
+
+  assignFallbackLocationsIfNeeded(state.photos);
+  const geoPhotos = activePhotos().filter((p) => p.location && Number.isFinite(p.location.lat) && Number.isFinite(p.location.lng));
+
+  if (els.inlineMapPinCount) {
+    els.inlineMapPinCount.textContent = `${geoPhotos.length}箇所の思い出`;
+  }
+
+  if (!inlineMarkersGroup || !inlineMapInstance) return;
+  inlineMarkersGroup.clearLayers();
+
+  geoPhotos.forEach((photo) => {
+    const marker = L.marker([photo.location.lat, photo.location.lng])
+      .bindPopup(() => createMapMarkerPopup(photo), { maxWidth: 240 });
+    inlineMarkersGroup.addLayer(marker);
+  });
+
+  setTimeout(() => {
+    if (inlineMapInstance) {
+      inlineMapInstance.invalidateSize();
+    }
+  }, 100);
+}
+
+function resetInlineMapView() {
+  if (!inlineMapInstance) return;
+  inlineMapInstance.setView(KANTO_CENTER, KANTO_DEFAULT_ZOOM, { animate: true });
+}
+
 function openDateMap() {
   if (!els.mapModal) return;
   pauseMemory();
   els.mapModal.hidden = false;
 
+  assignFallbackLocationsIfNeeded(state.photos);
   const geoPhotos = activePhotos().filter((p) => p.location && Number.isFinite(p.location.lat) && Number.isFinite(p.location.lng));
   if (els.mapPinCount) {
     els.mapPinCount.textContent = `${geoPhotos.length}箇所の思い出`;
   }
 
-  if (!mapInstance && typeof window.L !== "undefined") {
-    mapInstance = L.map("mapContainer").setView([35.6812, 139.7671], 5);
+  if (!modalMapInstance && typeof window.L !== "undefined") {
+    modalMapInstance = L.map("mapContainer").setView(KANTO_CENTER, KANTO_DEFAULT_ZOOM);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
-    }).addTo(mapInstance);
-    mapMarkersGroup = L.featureGroup().addTo(mapInstance);
+    }).addTo(modalMapInstance);
+    modalMarkersGroup = L.featureGroup().addTo(modalMapInstance);
   }
 
   setTimeout(() => {
-    if (mapInstance) {
-      mapInstance.invalidateSize();
-      renderMapMarkers(geoPhotos);
+    if (modalMapInstance) {
+      modalMapInstance.invalidateSize();
+      renderModalMapMarkers(geoPhotos);
     }
   }, 120);
 }
@@ -2311,41 +2438,19 @@ function closeDateMap() {
   if (els.mapModal) els.mapModal.hidden = true;
 }
 
-function renderMapMarkers(geoPhotos) {
-  if (!mapMarkersGroup || !mapInstance) return;
-  mapMarkersGroup.clearLayers();
+function renderModalMapMarkers(geoPhotos) {
+  if (!modalMarkersGroup || !modalMapInstance) return;
+  modalMarkersGroup.clearLayers();
 
   if (!geoPhotos.length) return;
 
   geoPhotos.forEach((photo) => {
-    const lat = photo.location.lat;
-    const lng = photo.location.lng;
-    const thumbUrl = createThumbnailUrl(photo) || createPhotoUrl(photo);
-    const dateStr = formatDate(photo.date);
-    const memoStr = photo.memo ? photo.memo : "思い出の写真";
-
-    const popupContent = document.createElement("div");
-    popupContent.className = "map-popup-card";
-    popupContent.innerHTML = `
-      <img src="${thumbUrl}" alt="">
-      <div class="map-popup-info">
-        <div class="map-popup-date">📅 ${dateStr}</div>
-        <div class="map-popup-memo">${escapeHtmlText(memoStr)}</div>
-        <div class="map-popup-action">▶ 写真を表示</div>
-      </div>
-    `;
-    popupContent.addEventListener("click", () => {
-      jumpToPhotoFromMap(photo.id);
-    });
-
-    const marker = L.marker([lat, lng]).bindPopup(popupContent, { maxWidth: 240 });
-    mapMarkersGroup.addLayer(marker);
+    const marker = L.marker([photo.location.lat, photo.location.lng])
+      .bindPopup(() => createMapMarkerPopup(photo), { maxWidth: 240 });
+    modalMarkersGroup.addLayer(marker);
   });
 
-  const bounds = mapMarkersGroup.getBounds();
-  if (bounds.isValid()) {
-    mapInstance.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-  }
+  modalMapInstance.setView(KANTO_CENTER, KANTO_DEFAULT_ZOOM);
 }
 
 function jumpToPhotoFromMap(photoId) {
@@ -2355,6 +2460,9 @@ function jumpToPhotoFromMap(photoId) {
     state.currentIndex = index;
     closeDateMap();
     render();
+    if (els.memoryStage) {
+      els.memoryStage.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   }
 }
 
@@ -2926,6 +3034,7 @@ els.mapOpenBtn?.addEventListener("click", openDateMap);
 els.mapOpenSideBtn?.addEventListener("click", openDateMap);
 els.mapOverlayBtn?.addEventListener("click", openDateMap);
 els.mapGalleryBtn?.addEventListener("click", openDateMap);
+els.mapResetViewBtn?.addEventListener("click", resetInlineMapView);
 els.mapCloseBtn?.addEventListener("click", closeDateMap);
 els.mapModal?.addEventListener("click", (e) => {
   if (e.target === els.mapModal) closeDateMap();
