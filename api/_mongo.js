@@ -208,6 +208,9 @@ function publicPhoto(doc) {
     memo: doc.memo || "",
     favorite: Boolean(doc.favorite),
     tags: Array.isArray(doc.tags) ? doc.tags : [],
+    deletedAt: doc.deletedAt ? timestamp(doc.deletedAt) : null,
+    location: doc.location || null,
+    exif: doc.exif || null,
   };
 }
 

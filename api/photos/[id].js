@@ -91,6 +91,15 @@ module.exports = async function handler(req, res) {
       if (Number.isFinite(Number(body.date))) {
         updateFields.sortTime = Number(body.date);
       }
+      if (body.deletedAt !== undefined) {
+        updateFields.deletedAt = body.deletedAt ? new Date(body.deletedAt) : null;
+      }
+      if (body.location !== undefined) {
+        updateFields.location = body.location;
+      }
+      if (body.exif !== undefined) {
+        updateFields.exif = body.exif;
+      }
 
       const result = await collection.findOneAndUpdate(
         { id, albumId },

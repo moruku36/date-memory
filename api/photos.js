@@ -45,6 +45,14 @@ module.exports = async function handler(req, res) {
     }
 
     if (req.method === "GET") {
+      // 30日以上前に削除された写真を自動完全削除
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      try {
+        await collection.deleteMany({ albumId, deletedAt: { $ne: null, $lt: thirtyDaysAgo } });
+      } catch (cleanErr) {
+        console.warn("Trash cleanup notice:", cleanErr);
+      }
+
       const docs = await collection
         .find({ albumId }, { projection: { image: 0, thumbnail: 0 } })
         .sort({ sortTime: 1, createdAt: 1 })
@@ -65,15 +73,13 @@ module.exports = async function handler(req, res) {
         return;
       }
 
-      let thumbnail;
+      let thumbnail = null;
       if (body.thumbnailDataUrl) {
         try {
-          const parsedThumbnail = dataUrlToBuffer(body.thumbnailDataUrl);
-          if (parsedThumbnail.buffer.length <= THUMBNAIL_MAX_BYTES) {
-            thumbnail = parsedThumbnail;
-          }
-        } catch {
-          thumbnail = null;
+          const parsedThumb = dataUrlToBuffer(body.thumbnailDataUrl);
+          thumbnail = { buffer: parsedThumb.buffer, contentType: parsedThumb.contentType };
+        } catch (error) {
+          console.warn("Client thumbnail parse failed.", error);
         }
       }
 
@@ -99,6 +105,9 @@ module.exports = async function handler(req, res) {
         memo: typeof body.memo === "string" ? body.memo.slice(0, 1000) : "",
         favorite: Boolean(body.favorite),
         tags: Array.isArray(body.tags) ? body.tags.map((t) => String(t).slice(0, 50)).slice(0, 20) : [],
+        deletedAt: body.deletedAt ? new Date(body.deletedAt) : null,
+        location: body.location || null,
+        exif: body.exif || null,
       };
 
       if (thumbnail) {

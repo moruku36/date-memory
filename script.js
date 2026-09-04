@@ -90,17 +90,37 @@ const els = {
   themeToggle: document.getElementById("themeToggle"),
   bgmToggle: document.getElementById("bgmToggle"),
   fullscreenToggle: document.getElementById("fullscreenToggle"),
+  mapOpenBtn: document.getElementById("mapOpenBtn"),
+  mapOpenSideBtn: document.getElementById("mapOpenSideBtn"),
   onThisDayBanner: document.getElementById("onThisDayBanner"),
   onThisDaySubtitle: document.getElementById("onThisDaySubtitle"),
   playOnThisDayBtn: document.getElementById("playOnThisDayBtn"),
   favoriteBtn: document.getElementById("favoriteBtn"),
   zoomBtn: document.getElementById("zoomBtn"),
+  infoBtn: document.getElementById("infoBtn"),
   photoMemoContainer: document.getElementById("photoMemoContainer"),
   photoMemoText: document.getElementById("photoMemoText"),
   photoMemoEditBox: document.getElementById("photoMemoEditBox"),
   photoMemoInput: document.getElementById("photoMemoInput"),
   photoMemoSaveBtn: document.getElementById("photoMemoSaveBtn"),
   photoMemoCancelBtn: document.getElementById("photoMemoCancelBtn"),
+  restoreSelectedBtn: document.getElementById("restoreSelectedBtn"),
+  deleteBtnLabel: document.getElementById("deleteBtnLabel"),
+  mapModal: document.getElementById("mapModal"),
+  mapCloseBtn: document.getElementById("mapCloseBtn"),
+  mapContainer: document.getElementById("mapContainer"),
+  mapPinCount: document.getElementById("mapPinCount"),
+  infoModal: document.getElementById("infoModal"),
+  infoCloseBtn: document.getElementById("infoCloseBtn"),
+  infoDate: document.getElementById("infoDate"),
+  infoDayOfWeek: document.getElementById("infoDayOfWeek"),
+  infoCamera: document.getElementById("infoCamera"),
+  infoDimensions: document.getElementById("infoDimensions"),
+  infoSize: document.getElementById("infoSize"),
+  infoLocationText: document.getElementById("infoLocationText"),
+  infoShowOnMapBtn: document.getElementById("infoShowOnMapBtn"),
+  bgmToast: document.getElementById("bgmToast"),
+  bgmToastText: document.getElementById("bgmToastText"),
   uploadProgressModal: document.getElementById("uploadProgressModal"),
   progressTitle: document.getElementById("progressTitle"),
   progressSubtitle: document.getElementById("progressSubtitle"),
@@ -350,13 +370,21 @@ function pruneSelection() {
 
 function updateSelectionControls() {
   const selectedCount = state.selectedIds.size;
-  els.selectModeBtn.disabled = !state.photos.length;
+  const isTrash = state.activeCollection === "trash";
+  els.selectModeBtn.disabled = !visiblePhotos().length;
   els.selectModeBtn.classList.toggle("active", state.selectionMode);
   els.selectModeBtn.setAttribute("aria-pressed", state.selectionMode ? "true" : "false");
   els.selectModeLabel.textContent = state.selectionMode ? "完了" : "選択";
   els.selectionActions.hidden = !state.selectionMode;
   els.selectionCount.textContent = `${selectedCount}枚選択中`;
   els.deleteSelectedBtn.disabled = selectedCount === 0 || cloud.loading;
+  if (els.deleteBtnLabel) {
+    els.deleteBtnLabel.textContent = isTrash ? "完全に削除" : "削除";
+  }
+  if (els.restoreSelectedBtn) {
+    els.restoreSelectedBtn.hidden = !isTrash;
+    els.restoreSelectedBtn.disabled = selectedCount === 0 || cloud.loading;
+  }
 }
 
 function updateSyncStatus(message) {
@@ -461,27 +489,39 @@ function revokePhotoUrls() {
   });
 }
 
+function activePhotos() {
+  return state.photos.filter((p) => !p.deletedAt);
+}
+
+function trashPhotos() {
+  return state.photos.filter((p) => Boolean(p.deletedAt));
+}
+
 function getOnThisDayPhotos() {
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentDate = now.getDate();
   const currentYear = now.getFullYear();
 
-  return state.photos.filter((photo) => {
+  return activePhotos().filter((photo) => {
     const d = new Date(photo.date);
     return d.getMonth() === currentMonth && d.getDate() === currentDate && d.getFullYear() < currentYear;
   });
 }
 
 function visiblePhotos() {
-  if (state.activeCollection === "all") return state.photos;
+  if (state.activeCollection === "trash") {
+    return trashPhotos();
+  }
+  const base = activePhotos();
+  if (state.activeCollection === "all") return base;
   if (state.activeCollection === "favorites") {
-    return state.photos.filter((p) => p.favorite);
+    return base.filter((p) => p.favorite);
   }
   if (state.activeCollection === "on_this_day") {
     return getOnThisDayPhotos();
   }
-  return state.photos.filter((photo) => formatMonth(photo.date) === state.activeCollection);
+  return base.filter((photo) => formatMonth(photo.date) === state.activeCollection);
 }
 
 function currentVisibleIndex() {
@@ -512,11 +552,12 @@ function setRandomCurrentIndex() {
 }
 
 function buildCollections() {
+  const active = activePhotos();
   const collections = [
-    { id: "all", label: "すべての写真", count: state.photos.length, cover: state.photos[0] },
+    { id: "all", label: "すべての写真", count: active.length, cover: active[0] },
   ];
 
-  const favPhotos = state.photos.filter((p) => p.favorite);
+  const favPhotos = active.filter((p) => p.favorite);
   if (favPhotos.length > 0) {
     collections.push({
       id: "favorites",
@@ -537,7 +578,7 @@ function buildCollections() {
   }
 
   const groups = new Map();
-  state.photos.forEach((photo) => {
+  active.forEach((photo) => {
     const month = formatMonth(photo.date);
     if (!groups.has(month)) groups.set(month, []);
     groups.get(month).push(photo);
@@ -551,6 +592,16 @@ function buildCollections() {
       cover: photos[0],
     });
   });
+
+  const trash = trashPhotos();
+  if (trash.length > 0) {
+    collections.push({
+      id: "trash",
+      label: "🗑️ 最近削除した項目",
+      count: trash.length,
+      cover: trash[0],
+    });
+  }
 
   return collections;
 }
@@ -673,6 +724,31 @@ function renderHero() {
   if (current.width && current.height) {
     els.heroPhoto.classList.add(current.height > current.width ? "portrait" : "landscape");
   }
+
+  preloadUpcomingPhotos();
+}
+
+function preloadUpcomingPhotos() {
+  const photos = visiblePhotos();
+  if (!photos.length) return;
+  const currentIdx = currentVisibleIndex();
+  const upcomingIndices = [
+    (currentIdx + 1) % photos.length,
+    (currentIdx + 2) % photos.length,
+    (currentIdx - 1 + photos.length) % photos.length,
+  ];
+
+  upcomingIndices.forEach((idx) => {
+    const photo = photos[idx];
+    if (photo) {
+      const url = createPhotoUrl(photo);
+      if (url) {
+        const img = new Image();
+        img.decoding = "async";
+        img.src = url;
+      }
+    }
+  });
 }
 
 function renderThumbItem(photo, index) {
@@ -1037,7 +1113,7 @@ async function signedPhotoUrl(storagePath) {
   return data.signedUrl;
 }
 
-async function uploadPhotoToCloud(file, dimensions, photoId = generatePhotoId()) {
+async function uploadPhotoToCloud(file, dimensions, photoId = generatePhotoId(), metadata = {}) {
   if (cloud.provider === "api") {
     const { file: uploadFile, dimensions: uploadDimensions } = await optimizeImageForApi(file);
     const dataUrl = await blobToDataUrl(uploadFile);
@@ -1059,11 +1135,13 @@ async function uploadPhotoToCloud(file, dimensions, photoId = generatePhotoId())
         albumId: cloud.albumId,
         name: uploadFile.name,
         type: uploadFile.type,
-        date: uploadFile.lastModified || file.lastModified || Date.now(),
+        date: metadata.date || uploadFile.lastModified || file.lastModified || Date.now(),
         width: uploadDimensions.width || dimensions.width,
         height: uploadDimensions.height || dimensions.height,
         dataUrl,
         thumbnailDataUrl,
+        location: metadata.location || null,
+        exif: metadata.exif || null,
       }),
     });
 
@@ -1310,38 +1388,119 @@ async function deleteSelectedPhotos() {
   const photos = selectedPhotos();
   if (!photos.length) return;
 
-  const message = `${photos.length}枚の写真を削除しますか？`;
-  if (!window.confirm(message)) return;
+  const isTrash = state.activeCollection === "trash";
+  const confirmMsg = isTrash
+    ? `${photos.length}枚の写真を完全に削除しますか？\nこの操作は取り消せません。`
+    : `${photos.length}枚の写真を削除しますか？\n（「最近削除した項目」から30日間復元できます）`;
+
+  if (!window.confirm(confirmMsg)) return;
 
   pauseMemory();
   cloud.loading = photos.some((photo) => photo.source === "cloud");
   updateSelectionControls();
-  updateSyncStatus(`${photos.length}枚を削除しています。`);
+  updateSyncStatus(isTrash ? `${photos.length}枚を完全削除しています...` : `${photos.length}枚をゴミ箱に移動中...`);
 
-  const photoIds = new Set(photos.map((photo) => photo.id));
   try {
-    for (const photo of photos) {
-      await deleteCloudPhoto(photo);
+    if (isTrash) {
+      // 物理完全削除
+      const photoIds = new Set(photos.map((photo) => photo.id));
+      for (const photo of photos) {
+        await deleteCloudPhoto(photo);
+      }
+      await deleteLocalPhotos(photos.filter((photo) => photo.blob).map((photo) => photo.id));
+      photos.forEach((photo) => {
+        if (photo.url) URL.revokeObjectURL(photo.url);
+      });
+      state.photos = state.photos.filter((photo) => !photoIds.has(photo.id));
+      if (!trashPhotos().length) {
+        state.activeCollection = "all";
+      }
+      updateShareStatus(`${photos.length}枚を完全に削除しました`);
+    } else {
+      // 30日ゴミ箱（ソフトデリート）
+      const now = Date.now();
+      for (const photo of photos) {
+        photo.deletedAt = now;
+        if (cloud.ready && photo.source === "cloud") {
+          try {
+            await fetch(apiUrl(`/api/photos/${encodeURIComponent(photo.id)}`), {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ deletedAt: now }),
+            });
+          } catch (e) {
+            console.warn("Cloud soft-delete failed:", e);
+          }
+        }
+        if (photo.source === "local" || photo.blob) {
+          try {
+            await savePhoto(photo);
+          } catch (e) {
+            console.warn("Local soft-delete failed:", e);
+          }
+        }
+      }
+      updateShareStatus(`${photos.length}枚を「最近削除した項目」に移動しました`);
     }
 
-    await deleteLocalPhotos(photos.filter((photo) => photo.blob).map((photo) => photo.id));
-    photos.forEach((photo) => {
-      if (photo.url) URL.revokeObjectURL(photo.url);
-    });
-
-    state.photos = state.photos.filter((photo) => !photoIds.has(photo.id));
     state.selectedIds.clear();
     state.selectionMode = false;
-    state.currentIndex = Math.min(state.currentIndex, Math.max(0, state.photos.length - 1));
-    if (state.activeCollection !== "all" && !visiblePhotos().length) {
+    state.currentIndex = Math.min(state.currentIndex, Math.max(0, visiblePhotos().length - 1));
+    writeCloudPhotoCache(state.photos);
+    render();
+  } catch (error) {
+    console.warn("写真の削除処理に失敗しました。", error);
+    updateShareStatus("写真の削除に失敗しました");
+  } finally {
+    cloud.loading = false;
+    updateSyncStatus();
+    updateSelectionControls();
+  }
+}
+
+async function restoreSelectedPhotos() {
+  const photos = selectedPhotos();
+  if (!photos.length) return;
+
+  pauseMemory();
+  cloud.loading = photos.some((photo) => photo.source === "cloud");
+  updateSelectionControls();
+  updateSyncStatus(`${photos.length}枚を復元しています...`);
+
+  try {
+    for (const photo of photos) {
+      photo.deletedAt = null;
+      if (cloud.ready && photo.source === "cloud") {
+        try {
+          await fetch(apiUrl(`/api/photos/${encodeURIComponent(photo.id)}`), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deletedAt: null }),
+          });
+        } catch (e) {
+          console.warn("Cloud restore failed:", e);
+        }
+      }
+      if (photo.source === "local" || photo.blob) {
+        try {
+          await savePhoto(photo);
+        } catch (e) {
+          console.warn("Local restore failed:", e);
+        }
+      }
+    }
+
+    state.selectedIds.clear();
+    state.selectionMode = false;
+    if (!trashPhotos().length) {
       state.activeCollection = "all";
     }
     writeCloudPhotoCache(state.photos);
     render();
-    updateShareStatus(`${photos.length}枚を削除しました`);
+    updateShareStatus(`${photos.length}枚の写真を復元しました`);
   } catch (error) {
-    console.warn("選択した写真の削除に失敗しました。", error);
-    updateShareStatus("写真の削除に失敗しました");
+    console.warn("写真の復元に失敗しました。", error);
+    updateShareStatus("写真の復元に失敗しました");
   } finally {
     cloud.loading = false;
     updateSyncStatus();
@@ -1401,6 +1560,73 @@ async function extractExifDate(file) {
   return null;
 }
 
+async function extractExifMetadata(file) {
+  const result = {
+    date: null,
+    camera: null,
+    location: null,
+    size: file.size || 0,
+  };
+
+  if (typeof window.EXIF !== "undefined" && window.EXIF.getData) {
+    try {
+      await new Promise((resolve) => {
+        window.EXIF.getData(file, function () {
+          try {
+            // 1. 撮影日時
+            const dt = window.EXIF.getTag(this, "DateTimeOriginal") || window.EXIF.getTag(this, "DateTime");
+            if (dt && typeof dt === "string") {
+              const match = /(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(dt);
+              if (match) {
+                const [_, y, m, d, h, min, s] = match;
+                const dObj = new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min), Number(s));
+                if (!isNaN(dObj.getTime())) result.date = dObj.getTime();
+              }
+            }
+
+            // 2. カメラ機種
+            const make = window.EXIF.getTag(this, "Make");
+            const model = window.EXIF.getTag(this, "Model");
+            if (model) {
+              const cleanMake = make ? String(make).trim() : "";
+              const cleanModel = String(model).trim();
+              result.camera = cleanModel.startsWith(cleanMake) ? cleanModel : `${cleanMake} ${cleanModel}`.trim();
+            }
+
+            // 3. GPS 位置情報
+            const lat = window.EXIF.getTag(this, "GPSLatitude");
+            const latRef = window.EXIF.getTag(this, "GPSLatitudeRef");
+            const lng = window.EXIF.getTag(this, "GPSLongitude");
+            const lngRef = window.EXIF.getTag(this, "GPSLongitudeRef");
+
+            if (lat && lng && Array.isArray(lat) && Array.isArray(lng)) {
+              const dLat = Number(lat[0]) + Number(lat[1]) / 60 + Number(lat[2]) / 3600;
+              const dLng = Number(lng[0]) + Number(lng[1]) / 60 + Number(lng[2]) / 3600;
+              const finalLat = (latRef === "S" || latRef === "s") ? -dLat : dLat;
+              const finalLng = (lngRef === "W" || lngRef === "w") ? -dLng : dLng;
+              if (!isNaN(finalLat) && !isNaN(finalLng)) {
+                result.location = { lat: finalLat, lng: finalLng };
+              }
+            }
+          } catch (ex) {
+            console.warn("EXIF tag parse error:", ex);
+          }
+          resolve();
+        });
+      });
+    } catch (e) {
+      console.warn("EXIF extraction error:", e);
+    }
+  }
+
+  // フォールバック: 自前バイナリパースで日付抽出
+  if (!result.date) {
+    result.date = await extractExifDate(file);
+  }
+
+  return result;
+}
+
 function showUploadProgress(total) {
   if (!els.uploadProgressModal) return;
   els.progressTitle.textContent = "写真を処理中...";
@@ -1434,15 +1660,21 @@ async function importFiles(fileList) {
     const file = await convertHeicIfNeeded(rawFile);
     if (!isSupportedImageFile(file)) continue;
 
-    const exifDate = await extractExifDate(file);
-    const photoDate = exifDate || file.lastModified || Date.now();
+    const exifMeta = await extractExifMetadata(file);
+    const photoDate = exifMeta.date || file.lastModified || Date.now();
     const dimensions = await getImageDimensions(file);
     const photoId = index === 0 ? firstImportedId : generatePhotoId();
 
     if (cloud.ready) {
       try {
-        const uploaded = await uploadPhotoToCloud(file, dimensions, photoId);
+        const uploaded = await uploadPhotoToCloud(file, dimensions, photoId, {
+          date: photoDate,
+          location: exifMeta.location,
+          exif: { camera: exifMeta.camera, size: file.size },
+        });
         uploaded.date = photoDate;
+        uploaded.location = exifMeta.location;
+        uploaded.exif = { camera: exifMeta.camera, size: file.size };
         state.photos.push(uploaded);
         continue;
       } catch (error) {
@@ -1471,6 +1703,8 @@ async function importFiles(fileList) {
       memo: "",
       favorite: false,
       tags: [],
+      location: exifMeta.location,
+      exif: { camera: exifMeta.camera, size: file.size },
     };
     try {
       await savePhoto(photo);
@@ -1898,26 +2132,82 @@ async function exportAlbumAsZip() {
   }
 }
 
-// 4. BGMプレイヤー
+// 4. BGMプレイヤー & トースト通知
+let bgmToastTimer = null;
+function showBgmToast(text) {
+  if (!els.bgmToast || !els.bgmToastText) return;
+  els.bgmToastText.textContent = text;
+  els.bgmToast.hidden = false;
+  if (bgmToastTimer) clearTimeout(bgmToastTimer);
+  bgmToastTimer = setTimeout(() => {
+    els.bgmToast.hidden = true;
+  }, 3200);
+}
+
+const BGM_GENRES = [
+  {
+    id: "musicbox",
+    name: "オルゴール調",
+    oscType: "sine",
+    tempo: 440,
+    duration: 1.4,
+    gain: 0.12,
+    scale: [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66, 1318.51],
+    pattern: [0, 2, 4, 3, 2, 4, 6, 5, 4, 2, 0, 1, 2, 4, 3, 0],
+  },
+  {
+    id: "cafepiano",
+    name: "カフェピアノ風",
+    oscType: "triangle",
+    tempo: 520,
+    duration: 1.6,
+    gain: 0.14,
+    scale: [293.66, 349.23, 392.0, 440.0, 523.25, 587.33, 698.46, 783.99],
+    pattern: [0, 3, 2, 4, 1, 3, 5, 4, 2, 4, 3, 1, 0, 2, 4, 2],
+  },
+  {
+    id: "acoustic",
+    name: "アコースティック風",
+    oscType: "sine",
+    tempo: 380,
+    duration: 1.1,
+    gain: 0.13,
+    scale: [329.63, 392.0, 440.0, 493.88, 587.33, 659.25, 783.99, 880.0],
+    pattern: [0, 2, 1, 3, 2, 4, 3, 5, 4, 2, 3, 1, 2, 0, 1, 0],
+  },
+  {
+    id: "ambient",
+    name: "星空アンビエント",
+    oscType: "sine",
+    tempo: 850,
+    duration: 3.2,
+    gain: 0.10,
+    scale: [261.63, 329.63, 392.0, 493.88, 587.33, 659.25],
+    pattern: [0, 2, 3, 4, 2, 1, 3, 5],
+  },
+];
+
 const bgmPlayer = {
   ctx: null,
   isPlaying: false,
   timer: null,
+  currentGenre: null,
   init() {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
     this.ctx = new AudioCtx();
   },
-  playNote(freq, time, duration = 1.2) {
+  playNote(freq, time, duration, gainLevel = 0.12, type = "sine") {
     if (!this.ctx) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
 
-    osc.type = "sine";
+    osc.type = type;
     osc.frequency.setValueAtTime(freq, time);
 
+    const attack = type === "sine" && duration > 2 ? 0.35 : 0.04;
     gain.gain.setValueAtTime(0, time);
-    gain.gain.linearRampToValueAtTime(0.12, time + 0.04);
+    gain.gain.linearRampToValueAtTime(gainLevel, time + attack);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
 
     osc.connect(gain);
@@ -1940,25 +2230,31 @@ const bgmPlayer = {
     els.bgmToggle?.classList.toggle("active", this.isPlaying);
 
     if (this.isPlaying) {
+      // ランダムにジャンルを選択
+      const genre = BGM_GENRES[Math.floor(Math.random() * BGM_GENRES.length)];
+      this.currentGenre = genre;
+      showBgmToast(`🎵 ${genre.name}を再生中`);
       this.startMelody();
     } else {
       this.stopMelody();
     }
   },
   startMelody() {
-    const scale = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25];
-    const pattern = [0, 2, 4, 3, 2, 4, 6, 5, 4, 2, 0, 1, 2, 4, 3, 0];
+    const genre = this.currentGenre || BGM_GENRES[0];
+    const { scale, pattern, tempo, duration, gain, oscType } = genre;
     let step = 0;
 
     this.timer = setInterval(() => {
       if (!this.isPlaying || !this.ctx) return;
       const note = scale[pattern[step % pattern.length]];
-      this.playNote(note, this.ctx.currentTime, 1.4);
+      this.playNote(note, this.ctx.currentTime, duration, gain, oscType);
+
+      // 低音ベース音（4拍ごと）
       if (step % 4 === 0) {
-        this.playNote(scale[0] / 2, this.ctx.currentTime, 2.0);
+        this.playNote(scale[0] / 2, this.ctx.currentTime, duration * 1.3, gain * 0.9, "sine");
       }
       step++;
-    }, 450);
+    }, tempo);
   },
   stopMelody() {
     if (this.timer) {
@@ -1968,7 +2264,156 @@ const bgmPlayer = {
   }
 };
 
-// 5. スワイプ操作
+// 6. 🗺️ ふたりのデートマップ
+let mapInstance = null;
+let mapMarkersGroup = null;
+
+function escapeHtmlText(str) {
+  return String(str || "").replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[m]));
+}
+
+function openDateMap() {
+  if (!els.mapModal) return;
+  pauseMemory();
+  els.mapModal.hidden = false;
+
+  const geoPhotos = activePhotos().filter((p) => p.location && Number.isFinite(p.location.lat) && Number.isFinite(p.location.lng));
+  if (els.mapPinCount) {
+    els.mapPinCount.textContent = `${geoPhotos.length}箇所の思い出`;
+  }
+
+  if (!mapInstance && typeof window.L !== "undefined") {
+    mapInstance = L.map("mapContainer").setView([35.6812, 139.7671], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+    }).addTo(mapInstance);
+    mapMarkersGroup = L.featureGroup().addTo(mapInstance);
+  }
+
+  setTimeout(() => {
+    if (mapInstance) {
+      mapInstance.invalidateSize();
+      renderMapMarkers(geoPhotos);
+    }
+  }, 120);
+}
+
+function closeDateMap() {
+  if (els.mapModal) els.mapModal.hidden = true;
+}
+
+function renderMapMarkers(geoPhotos) {
+  if (!mapMarkersGroup || !mapInstance) return;
+  mapMarkersGroup.clearLayers();
+
+  if (!geoPhotos.length) return;
+
+  geoPhotos.forEach((photo) => {
+    const lat = photo.location.lat;
+    const lng = photo.location.lng;
+    const thumbUrl = createThumbnailUrl(photo) || createPhotoUrl(photo);
+    const dateStr = formatDate(photo.date);
+    const memoStr = photo.memo ? photo.memo : "思い出の写真";
+
+    const popupContent = document.createElement("div");
+    popupContent.className = "map-popup-card";
+    popupContent.innerHTML = `
+      <img src="${thumbUrl}" alt="">
+      <div class="map-popup-info">
+        <div class="map-popup-date">📅 ${dateStr}</div>
+        <div class="map-popup-memo">${escapeHtmlText(memoStr)}</div>
+        <div class="map-popup-action">▶ 写真を表示</div>
+      </div>
+    `;
+    popupContent.addEventListener("click", () => {
+      jumpToPhotoFromMap(photo.id);
+    });
+
+    const marker = L.marker([lat, lng]).bindPopup(popupContent, { maxWidth: 240 });
+    mapMarkersGroup.addLayer(marker);
+  });
+
+  const bounds = mapMarkersGroup.getBounds();
+  if (bounds.isValid()) {
+    mapInstance.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+  }
+}
+
+function jumpToPhotoFromMap(photoId) {
+  const index = state.photos.findIndex((p) => p.id === photoId);
+  if (index >= 0) {
+    state.activeCollection = "all";
+    state.currentIndex = index;
+    closeDateMap();
+    render();
+  }
+}
+
+// 7. ℹ️ 写真の詳細情報シート
+function openPhotoInfo() {
+  const current = state.photos[state.currentIndex];
+  if (!current || !els.infoModal) return;
+
+  const d = new Date(current.date);
+  const days = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"];
+  const dayStr = days[d.getDay()];
+
+  if (els.infoDate) {
+    els.infoDate.textContent = `${formatDate(current.date)} ${d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`;
+  }
+  if (els.infoDayOfWeek) {
+    els.infoDayOfWeek.textContent = dayStr;
+  }
+  if (els.infoCamera) {
+    els.infoCamera.textContent = current.exif?.camera || "スマートフォン / デジタルカメラ";
+  }
+  if (els.infoDimensions) {
+    if (current.width && current.height) {
+      const mp = ((current.width * current.height) / 1000000).toFixed(1);
+      els.infoDimensions.textContent = `${current.width} × ${current.height} px (${mp}MP)`;
+    } else {
+      els.infoDimensions.textContent = "標準解像度";
+    }
+  }
+  if (els.infoSize) {
+    if (current.exif?.size) {
+      const mb = (current.exif.size / (1024 * 1024)).toFixed(2);
+      els.infoSize.textContent = `${mb} MB (${current.name || "写真"})`;
+    } else {
+      els.infoSize.textContent = current.name || "写真ファイル";
+    }
+  }
+  if (els.infoLocationText && els.infoShowOnMapBtn) {
+    if (current.location && Number.isFinite(current.location.lat) && Number.isFinite(current.location.lng)) {
+      const lat = current.location.lat.toFixed(4);
+      const lng = current.location.lng.toFixed(4);
+      els.infoLocationText.textContent = `緯度: ${lat}, 経度: ${lng}`;
+      els.infoShowOnMapBtn.hidden = false;
+      els.infoShowOnMapBtn.onclick = () => {
+        closePhotoInfo();
+        openDateMap();
+      };
+    } else {
+      els.infoLocationText.textContent = "位置情報なし";
+      els.infoShowOnMapBtn.hidden = true;
+    }
+  }
+
+  els.infoModal.hidden = false;
+}
+
+function closePhotoInfo() {
+  if (els.infoModal) els.infoModal.hidden = true;
+}
+
+// 8. スワイプ操作
 function initSwipeControls() {
   let touchStartX = 0;
   let touchStartY = 0;
@@ -2473,6 +2918,20 @@ els.selectModeBtn.addEventListener("click", () => {
 });
 
 els.deleteSelectedBtn.addEventListener("click", deleteSelectedPhotos);
+els.restoreSelectedBtn?.addEventListener("click", restoreSelectedPhotos);
+
+els.mapOpenBtn?.addEventListener("click", openDateMap);
+els.mapOpenSideBtn?.addEventListener("click", openDateMap);
+els.mapCloseBtn?.addEventListener("click", closeDateMap);
+els.mapModal?.addEventListener("click", (e) => {
+  if (e.target === els.mapModal) closeDateMap();
+});
+
+els.infoBtn?.addEventListener("click", openPhotoInfo);
+els.infoCloseBtn?.addEventListener("click", closePhotoInfo);
+els.infoModal?.addEventListener("click", (e) => {
+  if (e.target === els.infoModal) closePhotoInfo();
+});
 
 els.albumImportInput.addEventListener("change", (event) => {
   importAlbumFile(event.target.files[0]);
