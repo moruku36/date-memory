@@ -28,7 +28,7 @@ const state = {
   isPlaying: false,
   timer: null,
   speed: 5000,
-  view: "mosaic",
+  view: "grid",
   mood: "cinema",
   selectionMode: false,
   selectedIds: new Set(),
@@ -97,7 +97,10 @@ const els = {
   zoomBtn: document.getElementById("zoomBtn"),
   photoMemoContainer: document.getElementById("photoMemoContainer"),
   photoMemoText: document.getElementById("photoMemoText"),
+  photoMemoEditBox: document.getElementById("photoMemoEditBox"),
   photoMemoInput: document.getElementById("photoMemoInput"),
+  photoMemoSaveBtn: document.getElementById("photoMemoSaveBtn"),
+  photoMemoCancelBtn: document.getElementById("photoMemoCancelBtn"),
   uploadProgressModal: document.getElementById("uploadProgressModal"),
   progressTitle: document.getElementById("progressTitle"),
   progressSubtitle: document.getElementById("progressSubtitle"),
@@ -647,9 +650,11 @@ function renderHero() {
     els.photoMemoText.textContent = current.memo ? `💬 ${current.memo}` : "💬 メモを追加...";
     els.photoMemoText.hidden = false;
   }
+  if (els.photoMemoEditBox) {
+    els.photoMemoEditBox.hidden = true;
+  }
   if (els.photoMemoInput) {
     els.photoMemoInput.value = current.memo || "";
-    els.photoMemoInput.hidden = true;
   }
   if (els.zipExportBtn) {
     els.zipExportBtn.disabled = !hasPhotos;
@@ -1672,6 +1677,7 @@ function savePreferences() {
     albumName: els.albumName.value,
     speed: els.speedRange.value,
     mood: state.mood,
+    view: state.view,
     themeDark: document.body.classList.contains("theme-dark"),
   };
   localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
@@ -1695,6 +1701,12 @@ function applyPreferences() {
   }
   if (preferences.themeDark) document.body.classList.add("theme-dark");
   applyMood(preferences.mood || "cinema");
+
+  const viewMode = preferences.view === "strip" ? "strip" : "grid";
+  state.view = viewMode;
+  document.querySelectorAll("[data-view]").forEach((item) => {
+    item.classList.toggle("active", item.dataset.view === viewMode);
+  });
 }
 
 els.input.addEventListener("change", (event) => {
@@ -1754,6 +1766,7 @@ document.querySelectorAll("[data-view]").forEach((button) => {
     state.view = button.dataset.view;
     document.querySelectorAll("[data-view]").forEach((item) => item.classList.toggle("active", item === button));
     renderThumbs();
+    savePreferences();
   });
 });
 
@@ -1807,8 +1820,8 @@ async function saveCurrentPhotoMemo(newMemo) {
     els.photoMemoText.textContent = current.memo ? `💬 ${current.memo}` : "💬 メモを追加...";
     els.photoMemoText.hidden = false;
   }
-  if (els.photoMemoInput) {
-    els.photoMemoInput.hidden = true;
+  if (els.photoMemoEditBox) {
+    els.photoMemoEditBox.hidden = true;
   }
 
   if (current.source === "local" || current.blob) {
@@ -2030,18 +2043,37 @@ els.lightboxModal?.addEventListener("click", (e) => {
 });
 
 els.photoMemoText?.addEventListener("click", () => {
-  els.photoMemoText.hidden = true;
-  els.photoMemoInput.hidden = false;
-  els.photoMemoInput.focus();
+  const current = state.photos[state.currentIndex];
+  if (els.photoMemoInput) {
+    els.photoMemoInput.value = current?.memo || "";
+  }
+  if (els.photoMemoText) els.photoMemoText.hidden = true;
+  if (els.photoMemoEditBox) els.photoMemoEditBox.hidden = false;
+  els.photoMemoInput?.focus();
 });
 
-els.photoMemoInput?.addEventListener("blur", () => {
-  saveCurrentPhotoMemo(els.photoMemoInput.value);
+els.photoMemoSaveBtn?.addEventListener("click", () => {
+  if (els.photoMemoInput) {
+    saveCurrentPhotoMemo(els.photoMemoInput.value);
+  }
+});
+
+els.photoMemoCancelBtn?.addEventListener("click", () => {
+  if (els.photoMemoEditBox) els.photoMemoEditBox.hidden = true;
+  if (els.photoMemoText) els.photoMemoText.hidden = false;
+  const current = state.photos[state.currentIndex];
+  if (els.photoMemoInput) {
+    els.photoMemoInput.value = current?.memo || "";
+  }
 });
 
 els.photoMemoInput?.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
     saveCurrentPhotoMemo(els.photoMemoInput.value);
+  } else if (e.key === "Escape") {
+    if (els.photoMemoEditBox) els.photoMemoEditBox.hidden = true;
+    if (els.photoMemoText) els.photoMemoText.hidden = false;
   }
 });
 

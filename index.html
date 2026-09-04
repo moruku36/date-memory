@@ -9,7 +9,7 @@
     <link rel="apple-touch-icon" href="icons/icon.svg">
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <title>デートのメモリー</title>
-    <link rel="stylesheet" href="styles.css?v=20260831_5">
+    <link rel="stylesheet" href="styles.css?v=20260905_1">
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
   </head>
@@ -120,8 +120,19 @@
 
               <!-- 💬 写真メモ・コメントエリア -->
               <div class="photo-memo-container" id="photoMemoContainer">
-                <p class="photo-memo-text" id="photoMemoText">💬 メモを追加...</p>
-                <input class="photo-memo-input" id="photoMemoInput" type="text" placeholder="思い出のメモ・感想・場所を入力..." maxlength="200" hidden>
+                <p class="photo-memo-text" id="photoMemoText" title="クリックしてメモを編集">💬 メモを追加...</p>
+                <div class="photo-memo-edit-box" id="photoMemoEditBox" hidden>
+                  <textarea class="photo-memo-input" id="photoMemoInput" placeholder="思い出のメモ・感想・場所を入力... (改行もできます)" maxlength="500" rows="3"></textarea>
+                  <div class="photo-memo-actions">
+                    <button class="button primary compact memo-action-btn" id="photoMemoSaveBtn" type="button">
+                      <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+                        <path d="M20 6L9 17l-5-5"></path>
+                      </svg>
+                      保存
+                    </button>
+                    <button class="button quiet compact memo-action-btn" id="photoMemoCancelBtn" type="button">閉じる</button>
+                  </div>
+                </div>
               </div>
             </div>
           </article>
@@ -257,9 +268,12 @@
                 <span id="selectModeLabel">選択</span>
               </button>
               <div class="view-toggle" role="group" aria-label="表示切替">
-                <button class="icon-button active" data-view="mosaic" type="button" aria-label="モザイク表示" title="モザイク表示">
+                <button class="icon-button active" data-view="grid" type="button" aria-label="グリッド表示" title="グリッド表示">
                   <svg aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M4 4h7v7H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 13h7v7H4z"></path>
+                    <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+                    <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+                    <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+                    <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
                   </svg>
                 </button>
                 <button class="icon-button" data-view="strip" type="button" aria-label="フィルム表示" title="フィルム表示">
@@ -272,7 +286,7 @@
           </div>
 
           <div class="drop-zone" id="dropZone">
-            <div class="thumb-grid mosaic" id="thumbGrid"></div>
+            <div class="thumb-grid grid" id="thumbGrid"></div>
           </div>
         </section>
       </main>
@@ -428,7 +442,7 @@
       </div>
     </div>
 
-    <script src="config.js?v=20260831_5"></script>
-    <script src="script.js?v=20260831_5"></script>
+    <script src="config.js?v=20260905_1"></script>
+    <script src="script.js?v=20260905_1"></script>
   </body>
 </html>
