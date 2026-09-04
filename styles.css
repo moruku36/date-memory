@@ -1915,38 +1915,48 @@ body.theater-mode .memory-stage {
 
 .cluster-pin-body {
   position: relative;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #ff5e7e, #ff8c69);
+  background: #1e2022;
   color: #ffffff;
-  border-radius: 24px;
-  padding: 4px 10px;
-  font-size: 0.8rem;
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 0.82rem;
   font-weight: 800;
   white-space: nowrap;
-  box-shadow: 0 4px 14px rgba(255, 94, 126, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
   border: 2px solid #ffffff;
   cursor: pointer;
-  transition: transform 180ms ease;
+  transition: transform 180ms ease, background 180ms ease;
+  user-select: none;
 }
 
 .cluster-pin-body:hover {
   transform: scale(1.1);
+  background: #ff5e7e;
   z-index: 999;
 }
 
 .cluster-pin-icon {
-  margin-right: 4px;
+  margin-right: 5px;
   font-size: 0.95rem;
 }
 
+.cluster-pin-name {
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
 .cluster-pin-count {
-  background: rgba(255, 255, 255, 0.28);
-  padding: 1px 6px;
+  background: #ff5e7e;
+  color: #ffffff;
+  padding: 1px 7px;
   border-radius: 12px;
-  font-size: 0.74rem;
-  margin-left: 4px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  margin-left: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
 /* ℹ️ 写真の詳細情報モーダル */

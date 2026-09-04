@@ -2303,8 +2303,8 @@ const DATE_SPOT_MAP = {
   "2026-07-11": { name: "銀座・丸の内", lat: 35.6715, lng: 139.7650 },
   "2026-07-12": { name: "銀座・丸の内", lat: 35.6715, lng: 139.7650 },
   "2026-07-25": { name: "おうちデート（吉祥寺）", lat: 35.7030, lng: 139.5800 },
-  "2026-08-01": { name: "中目黒・代官山カフェ", lat: 35.6441, lng: 139.6988 },
-  "2026-08-02": { name: "中目黒・代官山カフェ", lat: 35.6441, lng: 139.6988 },
+  "2026-08-01": { name: "青山・表参道カフェ", lat: 35.6653, lng: 139.7123 },
+  "2026-08-02": { name: "青山・表参道カフェ", lat: 35.6653, lng: 139.7123 },
   "2026-08-16": { name: "横浜赤レンガ倉庫・みなとみらい", lat: 35.4528, lng: 139.6428 },
   "2026-08-23": { name: "ワーナーブラザース スタジオツアー東京（としまえん）", lat: 35.7447, lng: 139.6480 },
   "2026-08-29": { name: "高円寺阿波おどり（高円寺）", lat: 35.7053, lng: 139.6497 },
@@ -2480,12 +2480,12 @@ function updateInlineMap() {
       html: `
         <div class="cluster-pin-body">
           <span class="cluster-pin-icon">📍</span>
-          <span>${escapeHtmlText(shortName)}</span>
+          <span class="cluster-pin-name">${escapeHtmlText(shortName)}</span>
           <span class="cluster-pin-count">${group.photos.length}</span>
         </div>
       `,
       iconSize: [0, 0],
-      iconAnchor: [45, 16],
+      iconAnchor: [50, 16],
     });
 
     const marker = L.marker([group.lat, group.lng], { icon: clusterIcon })
@@ -2603,12 +2603,12 @@ function renderModalMapMarkers(geoPhotos) {
       html: `
         <div class="cluster-pin-body">
           <span class="cluster-pin-icon">📍</span>
-          <span>${escapeHtmlText(shortName)}</span>
+          <span class="cluster-pin-name">${escapeHtmlText(shortName)}</span>
           <span class="cluster-pin-count">${group.photos.length}</span>
         </div>
       `,
       iconSize: [0, 0],
-      iconAnchor: [45, 16],
+      iconAnchor: [50, 16],
     });
 
     const marker = L.marker([group.lat, group.lng], { icon: clusterIcon })
