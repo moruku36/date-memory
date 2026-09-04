@@ -697,9 +697,13 @@ body.theme-dark .play-button {
 
 .thumb-grid.strip {
   grid-auto-flow: column;
-  grid-auto-columns: minmax(150px, 18%);
+  grid-auto-columns: minmax(132px, calc((100% - 40px) / 5));
+  gap: 10px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
 .grid-sentinel {

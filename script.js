@@ -28,7 +28,7 @@ const state = {
   isPlaying: false,
   timer: null,
   speed: 5000,
-  view: "grid",
+  view: "strip",
   mood: "cinema",
   selectionMode: false,
   selectedIds: new Set(),
@@ -92,6 +92,8 @@ const els = {
   fullscreenToggle: document.getElementById("fullscreenToggle"),
   mapOpenBtn: document.getElementById("mapOpenBtn"),
   mapOpenSideBtn: document.getElementById("mapOpenSideBtn"),
+  mapGalleryBtn: document.getElementById("mapGalleryBtn"),
+  mapOverlayBtn: document.getElementById("mapOverlayBtn"),
   onThisDayBanner: document.getElementById("onThisDayBanner"),
   onThisDaySubtitle: document.getElementById("onThisDaySubtitle"),
   playOnThisDayBtn: document.getElementById("playOnThisDayBtn"),
@@ -1936,7 +1938,7 @@ function applyPreferences() {
   if (preferences.themeDark) document.body.classList.add("theme-dark");
   applyMood(preferences.mood || "cinema");
 
-  const viewMode = preferences.view === "strip" ? "strip" : "grid";
+  const viewMode = preferences.view === "grid" ? "grid" : "strip";
   state.view = viewMode;
   document.querySelectorAll("[data-view]").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === viewMode);
@@ -2922,6 +2924,8 @@ els.restoreSelectedBtn?.addEventListener("click", restoreSelectedPhotos);
 
 els.mapOpenBtn?.addEventListener("click", openDateMap);
 els.mapOpenSideBtn?.addEventListener("click", openDateMap);
+els.mapOverlayBtn?.addEventListener("click", openDateMap);
+els.mapGalleryBtn?.addEventListener("click", openDateMap);
 els.mapCloseBtn?.addEventListener("click", closeDateMap);
 els.mapModal?.addEventListener("click", (e) => {
   if (e.target === els.mapModal) closeDateMap();
