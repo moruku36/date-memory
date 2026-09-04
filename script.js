@@ -124,7 +124,13 @@ const els = {
   infoDimensions: document.getElementById("infoDimensions"),
   infoSize: document.getElementById("infoSize"),
   infoLocationText: document.getElementById("infoLocationText"),
+  infoLocationSpotName: document.getElementById("infoLocationSpotName"),
+  infoChangeSpotBtn: document.getElementById("infoChangeSpotBtn"),
   infoShowOnMapBtn: document.getElementById("infoShowOnMapBtn"),
+  infoSpotEditArea: document.getElementById("infoSpotEditArea"),
+  infoSpotSelect: document.getElementById("infoSpotSelect"),
+  infoSpotSaveBtn: document.getElementById("infoSpotSaveBtn"),
+  infoSpotCancelBtn: document.getElementById("infoSpotCancelBtn"),
   bgmToast: document.getElementById("bgmToast"),
   bgmToastText: document.getElementById("bgmToastText"),
   uploadProgressModal: document.getElementById("uploadProgressModal"),
@@ -2351,24 +2357,67 @@ function escapeHtmlText(str) {
   }[m]));
 }
 
-function createMapMarkerPopup(photo) {
-  const thumbUrl = createThumbnailUrl(photo) || createPhotoUrl(photo);
-  const dateStr = formatDate(photo.date);
-  const memoStr = photo.memo ? photo.memo : (photo.location?.spotName ? `📍 ${photo.location.spotName}` : "思い出の写真");
-
+function createMapClusterPopup(spotName, photos) {
   const popupContent = document.createElement("div");
   popupContent.className = "map-popup-card";
+
+  const primaryPhoto = photos[0];
+  const primaryThumb = createThumbnailUrl(primaryPhoto) || createPhotoUrl(primaryPhoto);
+  const dateStr = formatDate(primaryPhoto.date);
+  const memoStr = primaryPhoto.memo ? primaryPhoto.memo : `📍 ${spotName}`;
+
   popupContent.innerHTML = `
-    <img src="${thumbUrl}" alt="">
+    <img id="clusterPopupMainImg" src="${primaryThumb}" alt="">
     <div class="map-popup-info">
-      <div class="map-popup-date">📅 ${dateStr}</div>
-      <div class="map-popup-memo">${escapeHtmlText(memoStr)}</div>
+      <div class="map-popup-spot-title">
+        📍 <span>${escapeHtmlText(spotName)}</span>
+        <span class="cluster-pin-count">${photos.length}枚</span>
+      </div>
+      <div class="map-popup-date" id="clusterPopupDate">📅 ${dateStr}</div>
+      <div class="map-popup-memo" id="clusterPopupMemo">${escapeHtmlText(memoStr)}</div>
+      ${photos.length > 1 ? `
+        <div class="map-popup-thumbs" id="clusterPopupThumbs">
+          ${photos.map((p, idx) => `
+            <div class="map-popup-thumb-item ${idx === 0 ? "active" : ""}" data-id="${p.id}" data-idx="${idx}">
+              <img src="${createThumbnailUrl(p) || createPhotoUrl(p)}" alt="">
+            </div>
+          `).join("")}
+        </div>
+      ` : ""}
       <div class="map-popup-action">▶ 写真を表示</div>
     </div>
   `;
-  popupContent.addEventListener("click", () => {
-    jumpToPhotoFromMap(photo.id);
+
+  let currentSelectedPhoto = primaryPhoto;
+
+  // サムネイルクリックでメイン画像とメモを切り替え
+  const thumbItems = popupContent.querySelectorAll(".map-popup-thumb-item");
+  thumbItems.forEach((thumb) => {
+    thumb.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const pIdx = Number(thumb.dataset.idx);
+      const chosen = photos[pIdx];
+      if (!chosen) return;
+      currentSelectedPhoto = chosen;
+
+      thumbItems.forEach((t) => t.classList.remove("active"));
+      thumb.classList.add("active");
+
+      const mainImg = popupContent.querySelector("#clusterPopupMainImg");
+      const dateEl = popupContent.querySelector("#clusterPopupDate");
+      const memoEl = popupContent.querySelector("#clusterPopupMemo");
+
+      if (mainImg) mainImg.src = createThumbnailUrl(chosen) || createPhotoUrl(chosen);
+      if (dateEl) dateEl.textContent = `📅 ${formatDate(chosen.date)}`;
+      if (memoEl) memoEl.textContent = chosen.memo ? chosen.memo : `📍 ${spotName}`;
+    });
   });
+
+  // ポップアップ本体クリックで写真をメイン画面に開く
+  popupContent.addEventListener("click", () => {
+    jumpToPhotoFromMap(currentSelectedPhoto.id);
+  });
+
   return popupContent;
 }
 
@@ -2377,16 +2426,16 @@ function initInlineMap() {
   if (inlineMapInstance) return;
 
   inlineMapInstance = L.map("datingMapCanvas", {
-    scrollWheelZoom: false, // ページスクロールの邪魔をしないよう初期は無効、クリックでズーム可
+    scrollWheelZoom: false,
   }).setView(KANTO_CENTER, KANTO_DEFAULT_ZOOM);
 
-  // マップをクリックしたらホイールズームを有効化
   inlineMapInstance.on("focus", () => inlineMapInstance.scrollWheelZoom.enable());
   inlineMapInstance.on("blur", () => inlineMapInstance.scrollWheelZoom.disable());
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+  // 🗺️ 日本語・国土地理院淡色地図（見やすく地名がクリア）
+  L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>',
   }).addTo(inlineMapInstance);
 
   inlineMarkersGroup = L.featureGroup().addTo(inlineMapInstance);
@@ -2401,16 +2450,46 @@ function updateInlineMap() {
   assignFallbackLocationsIfNeeded(state.photos);
   const geoPhotos = activePhotos().filter((p) => p.location && Number.isFinite(p.location.lat) && Number.isFinite(p.location.lng));
 
-  if (els.inlineMapPinCount) {
-    els.inlineMapPinCount.textContent = `${geoPhotos.length}箇所の思い出`;
-  }
-
   if (!inlineMarkersGroup || !inlineMapInstance) return;
   inlineMarkersGroup.clearLayers();
 
+  // 📍 スポット（spotName または 座標キー）ごとに写真をグループ化（クラスタリング）
+  const spotGroups = new Map();
   geoPhotos.forEach((photo) => {
-    const marker = L.marker([photo.location.lat, photo.location.lng])
-      .bindPopup(() => createMapMarkerPopup(photo), { maxWidth: 240 });
+    const key = photo.location.spotName || `${photo.location.lat.toFixed(2)},${photo.location.lng.toFixed(2)}`;
+    if (!spotGroups.has(key)) {
+      spotGroups.set(key, {
+        spotName: photo.location.spotName || "思い出の場所",
+        lat: photo.location.lat,
+        lng: photo.location.lng,
+        photos: [],
+      });
+    }
+    spotGroups.get(key).photos.push(photo);
+  });
+
+  if (els.inlineMapPinCount) {
+    els.inlineMapPinCount.textContent = `${spotGroups.size}箇所の思い出 (${geoPhotos.length}枚)`;
+  }
+
+  spotGroups.forEach((group) => {
+    // 束ねピン（カスタムHTMLアイコン）の作成
+    const shortName = group.spotName.split("（")[0].replace("・", "/");
+    const clusterIcon = L.divIcon({
+      className: "cluster-custom-pin",
+      html: `
+        <div class="cluster-pin-body">
+          <span class="cluster-pin-icon">📍</span>
+          <span>${escapeHtmlText(shortName)}</span>
+          <span class="cluster-pin-count">${group.photos.length}</span>
+        </div>
+      `,
+      iconSize: [0, 0],
+      iconAnchor: [45, 16],
+    });
+
+    const marker = L.marker([group.lat, group.lng], { icon: clusterIcon })
+      .bindPopup(() => createMapClusterPopup(group.spotName, group.photos), { maxWidth: 280 });
     inlineMarkersGroup.addLayer(marker);
   });
 
@@ -2478,9 +2557,9 @@ function openDateMap() {
 
   if (!modalMapInstance && typeof window.L !== "undefined") {
     modalMapInstance = L.map("mapContainer").setView(KANTO_CENTER, KANTO_DEFAULT_ZOOM);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+    L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>',
     }).addTo(modalMapInstance);
     modalMarkersGroup = L.featureGroup().addTo(modalMapInstance);
   }
@@ -2503,9 +2582,37 @@ function renderModalMapMarkers(geoPhotos) {
 
   if (!geoPhotos.length) return;
 
+  const spotGroups = new Map();
   geoPhotos.forEach((photo) => {
-    const marker = L.marker([photo.location.lat, photo.location.lng])
-      .bindPopup(() => createMapMarkerPopup(photo), { maxWidth: 240 });
+    const key = photo.location.spotName || `${photo.location.lat.toFixed(2)},${photo.location.lng.toFixed(2)}`;
+    if (!spotGroups.has(key)) {
+      spotGroups.set(key, {
+        spotName: photo.location.spotName || "思い出の場所",
+        lat: photo.location.lat,
+        lng: photo.location.lng,
+        photos: [],
+      });
+    }
+    spotGroups.get(key).photos.push(photo);
+  });
+
+  spotGroups.forEach((group) => {
+    const shortName = group.spotName.split("（")[0].replace("・", "/");
+    const clusterIcon = L.divIcon({
+      className: "cluster-custom-pin",
+      html: `
+        <div class="cluster-pin-body">
+          <span class="cluster-pin-icon">📍</span>
+          <span>${escapeHtmlText(shortName)}</span>
+          <span class="cluster-pin-count">${group.photos.length}</span>
+        </div>
+      `,
+      iconSize: [0, 0],
+      iconAnchor: [45, 16],
+    });
+
+    const marker = L.marker([group.lat, group.lng], { icon: clusterIcon })
+      .bindPopup(() => createMapClusterPopup(group.spotName, group.photos), { maxWidth: 280 });
     modalMarkersGroup.addLayer(marker);
   });
 
@@ -2525,7 +2632,27 @@ function jumpToPhotoFromMap(photoId) {
   }
 }
 
-// 7. ℹ️ 写真の詳細情報シート
+// 7. ℹ️ 写真の詳細情報シート & スポット変更機能
+function populateSpotSelectOptions(currentSpotName) {
+  if (!els.infoSpotSelect) return;
+  els.infoSpotSelect.innerHTML = '<option value="">スポットを選択してください</option>';
+
+  const sortedSpots = Object.entries(DATE_SPOT_MAP).map(([date, spot]) => ({
+    date,
+    ...spot,
+  }));
+
+  sortedSpots.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = JSON.stringify({ name: s.name, lat: s.lat, lng: s.lng });
+    opt.textContent = `${s.name}`;
+    if (currentSpotName && currentSpotName === s.name) {
+      opt.selected = true;
+    }
+    els.infoSpotSelect.appendChild(opt);
+  });
+}
+
 function openPhotoInfo() {
   const current = state.photos[state.currentIndex];
   if (!current || !els.infoModal) return;
@@ -2559,28 +2686,87 @@ function openPhotoInfo() {
       els.infoSize.textContent = current.name || "写真ファイル";
     }
   }
-  if (els.infoLocationText && els.infoShowOnMapBtn) {
+
+  // 撮影場所情報
+  if (els.infoLocationText) {
     if (current.location && Number.isFinite(current.location.lat) && Number.isFinite(current.location.lng)) {
       const lat = current.location.lat.toFixed(4);
       const lng = current.location.lng.toFixed(4);
       els.infoLocationText.textContent = `緯度: ${lat}, 経度: ${lng}`;
-      els.infoShowOnMapBtn.hidden = false;
-      els.infoShowOnMapBtn.onclick = () => {
-        closePhotoInfo();
-        const mapSection = document.getElementById("datingMapSection");
-        if (mapSection) {
-          mapSection.scrollIntoView({ behavior: "smooth", block: "start" });
-          if (inlineMapInstance && current.location) {
-            inlineMapInstance.setView([current.location.lat, current.location.lng], 14, { animate: true });
+      if (els.infoLocationSpotName) {
+        els.infoLocationSpotName.textContent = current.location.spotName ? `📍 ${current.location.spotName}` : "";
+        els.infoLocationSpotName.hidden = !current.location.spotName;
+      }
+      if (els.infoShowOnMapBtn) {
+        els.infoShowOnMapBtn.hidden = false;
+        els.infoShowOnMapBtn.onclick = () => {
+          closePhotoInfo();
+          const mapSection = document.getElementById("datingMapSection");
+          if (mapSection) {
+            mapSection.scrollIntoView({ behavior: "smooth", block: "start" });
+            if (inlineMapInstance && current.location) {
+              inlineMapInstance.setView([current.location.lat, current.location.lng], 14, { animate: true });
+            }
+          } else {
+            openDateMap();
           }
-        } else {
-          openDateMap();
-        }
-      };
+        };
+      }
     } else {
-      els.infoLocationText.textContent = "位置情報なし";
-      els.infoShowOnMapBtn.hidden = true;
+      els.infoLocationText.textContent = "位置情報未設定";
+      if (els.infoLocationSpotName) els.infoLocationSpotName.hidden = true;
+      if (els.infoShowOnMapBtn) els.infoShowOnMapBtn.hidden = true;
     }
+  }
+
+  // 場所変更UIの初期化
+  if (els.infoSpotEditArea) els.infoSpotEditArea.hidden = true;
+  if (els.infoChangeSpotBtn) {
+    els.infoChangeSpotBtn.onclick = () => {
+      populateSpotSelectOptions(current.location?.spotName);
+      if (els.infoSpotEditArea) els.infoSpotEditArea.hidden = false;
+    };
+  }
+  if (els.infoSpotCancelBtn) {
+    els.infoSpotCancelBtn.onclick = () => {
+      if (els.infoSpotEditArea) els.infoSpotEditArea.hidden = true;
+    };
+  }
+  if (els.infoSpotSaveBtn) {
+    els.infoSpotSaveBtn.onclick = async () => {
+      const selectedVal = els.infoSpotSelect?.value;
+      if (!selectedVal) return;
+      try {
+        const spot = JSON.parse(selectedVal);
+        current.location = {
+          lat: spot.lat,
+          lng: spot.lng,
+          spotName: spot.name,
+        };
+
+        // ローカル保存
+        if (current.source === "local" || current.blob) {
+          await savePhoto(current);
+        }
+
+        // クラウド保存
+        if (cloud.ready && current.source === "cloud") {
+          await fetch(apiUrl(`/api/photos/${encodeURIComponent(current.id)}`), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ location: current.location }),
+          });
+        }
+
+        writeCloudPhotoCache(state.photos);
+        updateInlineMap();
+        openPhotoInfo(); // 情報表示を即時更新
+        showBgmToast(`📍 場所を「${spot.name}」に変更しました！`);
+      } catch (err) {
+        console.error("Save spot failed:", err);
+        showBgmToast("場所の保存に失敗しました");
+      }
+    };
   }
 
   els.infoModal.hidden = false;

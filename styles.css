@@ -1824,14 +1824,15 @@ body.theater-mode .memory-stage {
 }
 
 .map-popup-card {
-  width: 220px;
+  width: 260px;
+  max-width: 85vw;
   cursor: pointer;
   overflow: hidden;
 }
 
 .map-popup-card img {
   width: 100%;
-  height: 140px;
+  height: 150px;
   object-fit: cover;
   display: block;
 }
@@ -1842,19 +1843,60 @@ body.theater-mode .memory-stage {
   color: #1a1a1a;
 }
 
+.map-popup-spot-title {
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: #111;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .map-popup-date {
   font-size: 0.76rem;
   color: #888;
   font-weight: 700;
+  margin-top: 2px;
 }
 
 .map-popup-memo {
   font-size: 0.86rem;
   font-weight: 600;
   margin-top: 4px;
+  color: #333;
+}
+
+.map-popup-thumbs {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.map-popup-thumb-item {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 6px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.map-popup-thumb-item:hover,
+.map-popup-thumb-item.active {
+  opacity: 1;
+  transform: scale(1.05);
+  border-color: var(--accent);
+}
+
+.map-popup-thumb-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .map-popup-action {
@@ -1862,6 +1904,49 @@ body.theater-mode .memory-stage {
   font-size: 0.78rem;
   color: var(--accent);
   font-weight: 700;
+  text-align: right;
+}
+
+/* 📍 クラスタリング（束ね）カスタムピン */
+.cluster-custom-pin {
+  background: transparent;
+  border: none;
+}
+
+.cluster-pin-body {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #ff5e7e, #ff8c69);
+  color: #ffffff;
+  border-radius: 24px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(255, 94, 126, 0.45);
+  border: 2px solid #ffffff;
+  cursor: pointer;
+  transition: transform 180ms ease;
+}
+
+.cluster-pin-body:hover {
+  transform: scale(1.1);
+  z-index: 999;
+}
+
+.cluster-pin-icon {
+  margin-right: 4px;
+  font-size: 0.95rem;
+}
+
+.cluster-pin-count {
+  background: rgba(255, 255, 255, 0.28);
+  padding: 1px 6px;
+  border-radius: 12px;
+  font-size: 0.74rem;
+  margin-left: 4px;
 }
 
 /* ℹ️ 写真の詳細情報モーダル */

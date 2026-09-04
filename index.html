@@ -558,8 +558,25 @@
             <div class="info-item full">
               <span class="info-label">📍 撮影場所</span>
               <div class="info-location-box" id="infoLocationBox">
-                <span class="info-value" id="infoLocationText">位置情報なし</span>
-                <button class="button compact quiet" id="infoShowOnMapBtn" type="button" hidden>地図で見る</button>
+                <div>
+                  <span class="info-value" id="infoLocationText">位置情報なし</span>
+                  <p class="info-subtext" id="infoLocationSpotName" style="font-size: 0.82rem; color: var(--accent); margin-top: 2px; font-weight: 600;"></p>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <button class="button compact quiet" id="infoChangeSpotBtn" type="button">場所を変更</button>
+                  <button class="button compact quiet" id="infoShowOnMapBtn" type="button" hidden>地図で見る</button>
+                </div>
+              </div>
+              <!-- 場所変更用セレクター（展開式） -->
+              <div class="info-spot-edit-area" id="infoSpotEditArea" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;" hidden>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <select class="select-field" id="infoSpotSelect" style="flex: 1; min-height: 38px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); color: var(--ink);">
+                    <option value="">スポットを選択してください</option>
+                  </select>
+                  <button class="button primary compact" id="infoSpotSaveBtn" type="button">保存</button>
+                  <button class="button quiet compact" id="infoSpotCancelBtn" type="button">閉じる</button>
+                </div>
+                <p style="font-size: 0.78rem; color: var(--muted); margin: 0;">※選択した場所にピンが固定され、クラウドにも即時保存されます。</p>
               </div>
             </div>
           </div>
