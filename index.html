@@ -128,6 +128,15 @@
                 <span id="memoryCounter">1 / 1</span>
               </div>
 
+              <!-- 📍 撮影場所チップ（タップで場所編集モーダルを開く） -->
+              <div class="photo-location-row" id="photoLocationRow">
+                <button class="photo-location-chip" id="photoLocationChip" type="button" title="タップして写真の撮影場所を変更">
+                  <span class="photo-location-pin">📍</span>
+                  <span id="photoLocationChipText">場所を設定</span>
+                  <span class="photo-location-edit-badge">✏️ 修正</span>
+                </button>
+              </div>
+
               <!-- 💬 写真メモ・コメントエリア -->
               <div class="photo-memo-container" id="photoMemoContainer">
                 <p class="photo-memo-text" id="photoMemoText" title="クリックしてメモを編集">💬 メモを追加...</p>
@@ -319,6 +328,12 @@
           </div>
           <div class="dating-map-actions">
             <span class="dating-map-badge" id="inlineMapPinCount">0箇所の思い出</span>
+            <button class="button quiet compact" id="mapManualEditBtn" type="button" title="現在選択中の写真の場所を修正">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+                <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+              </svg>
+              ✏️ 写真の場所を編集
+            </button>
             <button class="button quiet compact" id="mapResyncBtn" type="button" title="端末のキャッシュを更新し、最新の位置情報と再同期">
               <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
@@ -581,6 +596,85 @@
                 <p style="font-size: 0.78rem; color: var(--muted); margin: 0;">※選択した場所にピンが固定され、クラウドにも即時保存されます。</p>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 📍 写真の場所・スポット編集モーダル -->
+      <div class="location-edit-modal" id="locationEditModal" hidden>
+        <div class="location-edit-card">
+          <div class="location-edit-head">
+            <div class="location-edit-title">
+              <span style="font-size: 1.3rem;">📍</span>
+              <h2>写真の場所・スポットを編集</h2>
+            </div>
+            <button class="icon-button glass" id="locationEditCloseBtn" type="button" aria-label="閉じる">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M18 6L6 18M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="location-edit-body">
+            <!-- 選択中の写真プレビュー -->
+            <div class="location-edit-target">
+              <img id="locEditPhotoThumb" src="" alt="" class="location-edit-thumb">
+              <div class="location-edit-target-info">
+                <p class="location-edit-target-title" id="locEditPhotoTitle">写真のタイトル</p>
+                <p class="location-edit-target-date" id="locEditPhotoDate">📅 撮影日: -</p>
+                <p class="location-edit-target-current" id="locEditCurrentSpot">現在地: <span>未設定</span></p>
+              </div>
+            </div>
+
+            <!-- 変更範囲の選択（同日一括 or この写真のみ） -->
+            <div class="location-edit-scope-box" id="locEditScopeSection">
+              <label class="location-scope-title">適用範囲：</label>
+              <div class="location-scope-options">
+                <label class="scope-radio-item" id="locScopeSameDayLabel">
+                  <input type="radio" name="locEditScope" value="same_day" id="locScopeSameDay" checked>
+                  <span id="locScopeSameDayText">同じ日（2026/08/01）の写真すべて（12枚）を変更</span>
+                </label>
+                <label class="scope-radio-item" id="locScopeSingleLabel">
+                  <input type="radio" name="locEditScope" value="single" id="locScopeSingle">
+                  <span>この写真（1枚）のみ変更</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- スポット名入力＆プリセット選択 -->
+            <div class="location-edit-form">
+              <div class="form-group">
+                <label for="locEditPresetSelect">① 定番スポットから選ぶ（自動入力）：</label>
+                <select id="locEditPresetSelect" class="select-field">
+                  <option value="">-- スポットを選択すると地図と名前が反映されます --</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="locEditSpotNameInput">② スポット名・場所の名前（自由入力）：</label>
+                <input type="text" id="locEditSpotNameInput" class="text-input" placeholder="例: 青山・表参道カフェ, 鎌倉高校前, etc." maxlength="100">
+              </div>
+
+              <!-- 🗺️ 地図ピン指定 (ドラッグ＆クリックでピン移動) -->
+              <div class="form-group">
+                <div class="loc-map-picker-head">
+                  <label>③ 地図上でピンを動かして位置を調整：</label>
+                  <span class="loc-coords-label" id="locCoordsLabel">緯度: 35.6812, 経度: 139.7671</span>
+                </div>
+                <p class="loc-picker-hint">💡 地図をタップするか、ピン 📍 をドラッグして好きな場所に移動できます</p>
+                <div class="loc-picker-map-container" id="locPickerMapContainer"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="location-edit-foot">
+            <button class="button quiet compact" id="locEditCancelBtn" type="button">キャンセル</button>
+            <button class="button primary compact" id="locEditSaveBtn" type="button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+                <path d="M20 6L9 17l-5-5"></path>
+              </svg>
+              この場所で保存する
+            </button>
           </div>
         </div>
       </div>

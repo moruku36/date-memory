@@ -127,6 +127,24 @@ const els = {
   infoLocationSpotName: document.getElementById("infoLocationSpotName"),
   infoChangeSpotBtn: document.getElementById("infoChangeSpotBtn"),
   infoShowOnMapBtn: document.getElementById("infoShowOnMapBtn"),
+  photoLocationChip: document.getElementById("photoLocationChip"),
+  photoLocationChipText: document.getElementById("photoLocationChipText"),
+  mapManualEditBtn: document.getElementById("mapManualEditBtn"),
+  locationEditModal: document.getElementById("locationEditModal"),
+  locationEditCloseBtn: document.getElementById("locationEditCloseBtn"),
+  locEditPhotoThumb: document.getElementById("locEditPhotoThumb"),
+  locEditPhotoTitle: document.getElementById("locEditPhotoTitle"),
+  locEditPhotoDate: document.getElementById("locEditPhotoDate"),
+  locEditCurrentSpot: document.getElementById("locEditCurrentSpot"),
+  locScopeSameDay: document.getElementById("locScopeSameDay"),
+  locScopeSameDayText: document.getElementById("locScopeSameDayText"),
+  locScopeSingle: document.getElementById("locScopeSingle"),
+  locEditPresetSelect: document.getElementById("locEditPresetSelect"),
+  locEditSpotNameInput: document.getElementById("locEditSpotNameInput"),
+  locCoordsLabel: document.getElementById("locCoordsLabel"),
+  locPickerMapContainer: document.getElementById("locPickerMapContainer"),
+  locEditCancelBtn: document.getElementById("locEditCancelBtn"),
+  locEditSaveBtn: document.getElementById("locEditSaveBtn"),
   infoSpotEditArea: document.getElementById("infoSpotEditArea"),
   infoSpotSelect: document.getElementById("infoSpotSelect"),
   infoSpotSaveBtn: document.getElementById("infoSpotSaveBtn"),
@@ -707,6 +725,12 @@ function renderHero() {
   const photos = visiblePhotos();
   els.memoryCounter.textContent = `${currentVisibleIndex() + 1} / ${photos.length}`;
   els.photoCount.textContent = `${state.photos.length}枚`;
+
+  // 撮影場所チップ
+  if (els.photoLocationChipText) {
+    const spotName = current.location?.spotName;
+    els.photoLocationChipText.textContent = spotName || "場所を設定";
+  }
 
   // お気に入り状態
   if (els.favoriteBtn) {
@@ -2327,6 +2351,9 @@ const DEFAULT_FALLBACK_SPOTS = [
 function assignFallbackLocationsIfNeeded(photos) {
   if (!Array.isArray(photos)) return;
   photos.forEach((photo, idx) => {
+    // 手動で設定された場所は上書きしない
+    if (photo.location?.manual || photo.isManualLocation) return;
+
     const rawDate = photo.date || photo.createdAt;
     let dateKey = "";
     if (rawDate) {
@@ -2373,7 +2400,7 @@ function createMapClusterPopup(spotName, photos) {
   const memoStr = primaryPhoto.memo ? primaryPhoto.memo : `📍 ${spotName}`;
 
   popupContent.innerHTML = `
-    <img id="clusterPopupMainImg" src="${primaryThumb}" alt="">
+    <img id="clusterPopupMainImg" src="${primaryThumb}" alt="" style="cursor: pointer;" title="タップして写真を表示">
     <div class="map-popup-info">
       <div class="map-popup-spot-title">
         📍 <span>${escapeHtmlText(spotName)}</span>
@@ -2390,7 +2417,10 @@ function createMapClusterPopup(spotName, photos) {
           `).join("")}
         </div>
       ` : ""}
-      <div class="map-popup-action">▶ 写真を表示</div>
+      <div class="map-popup-actions-row">
+        <button class="map-popup-btn primary" id="clusterPopupJumpBtn" type="button">▶ 写真を表示</button>
+        <button class="map-popup-btn secondary" id="clusterPopupEditBtn" type="button">✏️ 場所を修正</button>
+      </div>
     </div>
   `;
 
@@ -2419,10 +2449,30 @@ function createMapClusterPopup(spotName, photos) {
     });
   });
 
-  // ポップアップ本体クリックで写真をメイン画面に開く
-  popupContent.addEventListener("click", () => {
-    jumpToPhotoFromMap(currentSelectedPhoto.id);
-  });
+  const jumpBtn = popupContent.querySelector("#clusterPopupJumpBtn");
+  const editBtn = popupContent.querySelector("#clusterPopupEditBtn");
+  const mainImg = popupContent.querySelector("#clusterPopupMainImg");
+
+  if (jumpBtn) {
+    jumpBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      jumpToPhotoFromMap(currentSelectedPhoto.id);
+    });
+  }
+
+  if (editBtn) {
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openLocationEditModal(currentSelectedPhoto, { spotName, photos });
+    });
+  }
+
+  if (mainImg) {
+    mainImg.addEventListener("click", (e) => {
+      e.stopPropagation();
+      jumpToPhotoFromMap(currentSelectedPhoto.id);
+    });
+  }
 
   return popupContent;
 }
@@ -2725,53 +2775,11 @@ function openPhotoInfo() {
     }
   }
 
-  // 場所変更UIの初期化
-  if (els.infoSpotEditArea) els.infoSpotEditArea.hidden = true;
+  // 場所変更UI（新・場所編集モーダルを開く）
   if (els.infoChangeSpotBtn) {
     els.infoChangeSpotBtn.onclick = () => {
-      populateSpotSelectOptions(current.location?.spotName);
-      if (els.infoSpotEditArea) els.infoSpotEditArea.hidden = false;
-    };
-  }
-  if (els.infoSpotCancelBtn) {
-    els.infoSpotCancelBtn.onclick = () => {
-      if (els.infoSpotEditArea) els.infoSpotEditArea.hidden = true;
-    };
-  }
-  if (els.infoSpotSaveBtn) {
-    els.infoSpotSaveBtn.onclick = async () => {
-      const selectedVal = els.infoSpotSelect?.value;
-      if (!selectedVal) return;
-      try {
-        const spot = JSON.parse(selectedVal);
-        current.location = {
-          lat: spot.lat,
-          lng: spot.lng,
-          spotName: spot.name,
-        };
-
-        // ローカル保存
-        if (current.source === "local" || current.blob) {
-          await savePhoto(current);
-        }
-
-        // クラウド保存
-        if (cloud.ready && current.source === "cloud") {
-          await fetch(apiUrl(`/api/photos/${encodeURIComponent(current.id)}`), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ location: current.location }),
-          });
-        }
-
-        writeCloudPhotoCache(state.photos);
-        updateInlineMap();
-        openPhotoInfo(); // 情報表示を即時更新
-        showBgmToast(`📍 場所を「${spot.name}」に変更しました！`);
-      } catch (err) {
-        console.error("Save spot failed:", err);
-        showBgmToast("場所の保存に失敗しました");
-      }
+      closePhotoInfo();
+      openLocationEditModal(current);
     };
   }
 
@@ -2780,6 +2788,261 @@ function openPhotoInfo() {
 
 function closePhotoInfo() {
   if (els.infoModal) els.infoModal.hidden = true;
+}
+
+// === 📍 写真の場所・スポット手動編集モーダル ===
+let locPickerMapInstance = null;
+let locPickerMarker = null;
+let locEditingPhoto = null;
+let locCurrentLatLng = { lat: 35.6812, lng: 139.7671 };
+
+function getPhotoDateKey(photoOrDate) {
+  const raw = typeof photoOrDate === "object" && photoOrDate !== null
+    ? (photoOrDate.date || photoOrDate.createdAt || photoOrDate.sortTime)
+    : photoOrDate;
+  if (!raw) return "";
+  const num = Number(raw);
+  const dateObj = new Date(!isNaN(num) && num < 1e11 ? num * 1000 : raw);
+  if (!isNaN(dateObj.getTime())) {
+    return dateObj.toISOString().slice(0, 10);
+  }
+  return "";
+}
+
+function openLocationEditModal(photo, options = {}) {
+  const targetPhoto = photo || state.photos[state.currentIndex];
+  if (!targetPhoto || !els.locationEditModal) return;
+
+  locEditingPhoto = targetPhoto;
+
+  // 1. 写真サムネイル・タイトル・撮影日
+  const thumbUrl = createThumbnailUrl(targetPhoto) || createPhotoUrl(targetPhoto);
+  if (els.locEditPhotoThumb) els.locEditPhotoThumb.src = thumbUrl;
+  if (els.locEditPhotoTitle) els.locEditPhotoTitle.textContent = targetPhoto.name || "思い出の写真";
+  if (els.locEditPhotoDate) {
+    els.locEditPhotoDate.textContent = `📅 撮影日: ${formatDate(targetPhoto.date)}`;
+  }
+  const currentSpot = targetPhoto.location?.spotName || "未設定";
+  if (els.locEditCurrentSpot) {
+    els.locEditCurrentSpot.innerHTML = `現在地: <span>${escapeHtmlText(currentSpot)}</span>`;
+  }
+
+  // 2. 適用範囲（同じ撮影日の写真をカウント）
+  const targetDateKey = getPhotoDateKey(targetPhoto);
+  const sameDayPhotos = state.photos.filter((p) => !p.deletedAt && getPhotoDateKey(p) === targetDateKey);
+
+  if (els.locScopeSameDayText) {
+    const dateFormatted = targetDateKey ? targetDateKey.replace(/-/g, "/") : "同じ日";
+    els.locScopeSameDayText.textContent = `同じ日（${dateFormatted}）の写真すべて（${sameDayPhotos.length}枚）を変更`;
+  }
+  if (els.locScopeSameDay) {
+    els.locScopeSameDay.checked = sameDayPhotos.length > 1;
+  }
+  if (els.locScopeSingle) {
+    els.locScopeSingle.checked = sameDayPhotos.length <= 1;
+  }
+
+  // 3. プリセットスポット選択肢を構築
+  if (els.locEditPresetSelect) {
+    els.locEditPresetSelect.innerHTML = '<option value="">-- スポットを選択すると自動入力されます --</option>';
+
+    const spotMap = new Map();
+    // DATE_SPOT_MAP から登録
+    Object.entries(DATE_SPOT_MAP).forEach(([date, s]) => {
+      if (!spotMap.has(s.name)) {
+        spotMap.set(s.name, { name: s.name, lat: s.lat, lng: s.lng });
+      }
+    });
+    // 現在の写真に含まれるカスタムスポットも追加
+    state.photos.forEach((p) => {
+      if (p.location?.spotName && Number.isFinite(p.location.lat) && !spotMap.has(p.location.spotName)) {
+        spotMap.set(p.location.spotName, {
+          name: p.location.spotName,
+          lat: p.location.lat,
+          lng: p.location.lng,
+        });
+      }
+    });
+
+    spotMap.forEach((s) => {
+      const opt = document.createElement("option");
+      opt.value = JSON.stringify(s);
+      opt.textContent = s.name;
+      if (targetPhoto.location?.spotName === s.name) {
+        opt.selected = true;
+      }
+      els.locEditPresetSelect.appendChild(opt);
+    });
+  }
+
+  // 4. スポット名入力欄
+  if (els.locEditSpotNameInput) {
+    els.locEditSpotNameInput.value = targetPhoto.location?.spotName || (options.spotName || "");
+  }
+
+  // 5. 座標初期化
+  let initLat = 35.6812;
+  let initLng = 139.7671;
+  if (targetPhoto.location && Number.isFinite(targetPhoto.location.lat) && Number.isFinite(targetPhoto.location.lng)) {
+    initLat = targetPhoto.location.lat;
+    initLng = targetPhoto.location.lng;
+  } else if (options.photos && options.photos[0]?.location) {
+    initLat = options.photos[0].location.lat;
+    initLng = options.photos[0].location.lng;
+  }
+  locCurrentLatLng = { lat: initLat, lng: initLng };
+  updateLocationPickerCoordsLabel(initLat, initLng);
+
+  // 6. モーダルを表示
+  els.locationEditModal.hidden = false;
+
+  // 7. インタラクティブミニマップを更新
+  setTimeout(() => {
+    initOrUpdateLocPickerMap(initLat, initLng);
+  }, 120);
+}
+
+function closeLocationEditModal() {
+  if (els.locationEditModal) els.locationEditModal.hidden = true;
+  locEditingPhoto = null;
+}
+
+function updateLocationPickerCoordsLabel(lat, lng) {
+  if (els.locCoordsLabel) {
+    els.locCoordsLabel.textContent = `緯度: ${Number(lat).toFixed(4)}, 経度: ${Number(lng).toFixed(4)}`;
+  }
+}
+
+function initOrUpdateLocPickerMap(lat, lng) {
+  if (typeof window.L === "undefined" || !els.locPickerMapContainer) return;
+
+  if (!locPickerMapInstance) {
+    locPickerMapInstance = L.map("locPickerMapContainer", {
+      zoomControl: true,
+      scrollWheelZoom: true,
+    }).setView([lat, lng], 13);
+
+    L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>',
+    }).addTo(locPickerMapInstance);
+
+    locPickerMarker = L.marker([lat, lng], { draggable: true }).addTo(locPickerMapInstance);
+
+    locPickerMarker.on("dragend", (e) => {
+      const pos = e.target.getLatLng();
+      locCurrentLatLng = { lat: pos.lat, lng: pos.lng };
+      updateLocationPickerCoordsLabel(pos.lat, pos.lng);
+    });
+
+    locPickerMapInstance.on("click", (e) => {
+      locPickerMarker.setLatLng(e.latlng);
+      locCurrentLatLng = { lat: e.latlng.lat, lng: e.latlng.lng };
+      updateLocationPickerCoordsLabel(e.latlng.lat, e.latlng.lng);
+    });
+  } else {
+    locPickerMapInstance.setView([lat, lng], 13);
+    if (locPickerMarker) {
+      locPickerMarker.setLatLng([lat, lng]);
+    }
+  }
+
+  locPickerMapInstance.invalidateSize();
+}
+
+async function saveLocationEdit() {
+  if (!locEditingPhoto) return;
+
+  const spotName = els.locEditSpotNameInput ? els.locEditSpotNameInput.value.trim() : "";
+  if (!spotName) {
+    showBgmToast("⚠️ スポット名・場所の名前を入力してください");
+    els.locEditSpotNameInput?.focus();
+    return;
+  }
+
+  const newLocation = {
+    lat: +(locCurrentLatLng.lat).toFixed(6),
+    lng: +(locCurrentLatLng.lng).toFixed(6),
+    spotName: spotName,
+    manual: true,
+  };
+
+  const isSameDay = els.locScopeSameDay?.checked;
+  const targetDateKey = getPhotoDateKey(locEditingPhoto);
+  const targetPhotos = isSameDay
+    ? state.photos.filter((p) => !p.deletedAt && getPhotoDateKey(p) === targetDateKey)
+    : [locEditingPhoto];
+
+  if (els.locEditSaveBtn) {
+    els.locEditSaveBtn.disabled = true;
+    els.locEditSaveBtn.textContent = "保存中...";
+  }
+
+  try {
+    // 1. メモリ内写真オブジェクトを更新
+    targetPhotos.forEach((p) => {
+      p.location = { ...newLocation };
+      p.isManualLocation = true;
+    });
+
+    // 2. ローカル保存 (IndexedDB)
+    for (const p of targetPhotos) {
+      if (p.source === "local" || p.blob) {
+        await savePhoto(p);
+      }
+    }
+
+    // 3. クラウド一括保存 (MongoDB PATCH)
+    if (cloud.ready) {
+      const cloudPhotoIds = targetPhotos.filter((p) => p.source === "cloud").map((p) => p.id);
+      if (cloudPhotoIds.length > 0) {
+        try {
+          const res = await fetch(apiUrl("/api/photos"), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ids: cloudPhotoIds,
+              location: newLocation,
+            }),
+          });
+          if (!res.ok) {
+            // 個別フォールバック
+            await Promise.all(
+              cloudPhotoIds.map((id) =>
+                fetch(apiUrl(`/api/photos/${encodeURIComponent(id)}`), {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ location: newLocation }),
+                })
+              )
+            );
+          }
+        } catch (cloudErr) {
+          console.warn("Cloud location save warning:", cloudErr);
+        }
+      }
+    }
+
+    writeCloudPhotoCache(state.photos);
+    updateInlineMap();
+    renderCurrentPhoto();
+    closeLocationEditModal();
+
+    showBgmToast(`📍 場所を「${spotName}」に更新しました！（${targetPhotos.length}枚）`);
+  } catch (err) {
+    console.error("Save location edit failed:", err);
+    showBgmToast("⚠️ 場所の保存に失敗しました");
+  } finally {
+    if (els.locEditSaveBtn) {
+      els.locEditSaveBtn.disabled = false;
+      els.locEditSaveBtn.innerHTML = `
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+          <path d="M20 6L9 17l-5-5"></path>
+        </svg>
+        この場所で保存する
+      `;
+    }
+  }
 }
 
 // 8. スワイプ操作
@@ -2855,6 +3118,44 @@ els.lightboxModal?.addEventListener("click", (e) => {
     closeLightbox();
   }
 });
+
+// 📍 場所編集モーダルのイベントバインド
+els.photoLocationChip?.addEventListener("click", () => {
+  const current = state.photos[state.currentIndex];
+  if (current) openLocationEditModal(current);
+});
+
+els.mapManualEditBtn?.addEventListener("click", () => {
+  const current = state.photos[state.currentIndex];
+  if (current) openLocationEditModal(current);
+});
+
+els.locationEditCloseBtn?.addEventListener("click", closeLocationEditModal);
+els.locEditCancelBtn?.addEventListener("click", closeLocationEditModal);
+els.locationEditModal?.addEventListener("click", (e) => {
+  if (e.target === els.locationEditModal) closeLocationEditModal();
+});
+
+els.locEditPresetSelect?.addEventListener("change", (e) => {
+  const val = e.target.value;
+  if (!val) return;
+  try {
+    const s = JSON.parse(val);
+    if (els.locEditSpotNameInput) {
+      els.locEditSpotNameInput.value = s.name;
+    }
+    locCurrentLatLng = { lat: s.lat, lng: s.lng };
+    updateLocationPickerCoordsLabel(s.lat, s.lng);
+    if (locPickerMapInstance && locPickerMarker) {
+      locPickerMarker.setLatLng([s.lat, s.lng]);
+      locPickerMapInstance.setView([s.lat, s.lng], 14, { animate: true });
+    }
+  } catch (err) {
+    console.warn("Preset parse error:", err);
+  }
+});
+
+els.locEditSaveBtn?.addEventListener("click", saveLocationEdit);
 
 els.photoMemoText?.addEventListener("click", () => {
   const current = state.photos[state.currentIndex];

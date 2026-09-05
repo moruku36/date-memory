@@ -101,11 +101,12 @@ module.exports = async function handler(req, res) {
 
         const spot = DATE_SPOT_MAP[dateKey] || DEFAULT_SPOTS[idx % DEFAULT_SPOTS.length];
 
-        // 以前の誤ったラウンドロビン位置（湘南、鎌倉などへの誤紐付け）または未設定の場合は正確なスポットに更新
+        // 手動で設定された位置情報（manual: true または isManualLocation: true）は上書きしない
+        const isManual = Boolean(doc.location?.manual || doc.isManualLocation);
         const isDefaultLocation = !doc.location || typeof doc.location.lat !== "number";
-        const isKnownMismatch = DATE_SPOT_MAP[dateKey] && (!doc.location?.spotName || doc.location.spotName !== spot.name);
+        const isKnownMismatch = !isManual && DATE_SPOT_MAP[dateKey] && (!doc.location?.spotName || doc.location.spotName !== spot.name);
 
-        if (isDefaultLocation || isKnownMismatch) {
+        if (!isManual && (isDefaultLocation || isKnownMismatch)) {
           const jitterLat = ((idx * 13) % 20 - 10) * 0.0012;
           const jitterLng = ((idx * 17) % 20 - 10) * 0.0012;
           doc.location = {
@@ -193,6 +194,35 @@ module.exports = async function handler(req, res) {
       return;
     }
 
+    if (req.method === "PATCH") {
+      const body = await readJson(req);
+      if (Array.isArray(body.ids) && body.ids.length > 0 && body.location) {
+        const newLocation = {
+          lat: Number(body.location.lat),
+          lng: Number(body.location.lng),
+          spotName: String(body.location.spotName || "").slice(0, 100),
+          manual: true,
+        };
+
+        const result = await collection.updateMany(
+          { id: { $in: body.ids }, albumId },
+          {
+            $set: {
+              location: newLocation,
+              isManualLocation: true,
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        res.status(200).json({ ok: true, matched: result.matchedCount, modified: result.modifiedCount, location: newLocation });
+        return;
+      }
+
+      res.status(400).json({ error: "Invalid PATCH body. Requires { ids: string[], location: object }" });
+      return;
+    }
+
     if (req.method === "DELETE") {
       const adminToken = process.env.ADMIN_TOKEN;
       if (!adminToken || req.headers["x-admin-token"] !== adminToken) {
@@ -205,7 +235,7 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    res.setHeader("Allow", "GET,POST,DELETE,OPTIONS");
+    res.setHeader("Allow", "GET,POST,PATCH,DELETE,OPTIONS");
     res.status(405).json({ error: "Method not allowed" });
   } catch (error) {
     if (error instanceof SyntaxError || error.message === "Invalid image payload" || error.message === "Unsupported image type") {
