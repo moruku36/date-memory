@@ -77,6 +77,7 @@ module.exports = async function handler(req, res) {
         "2026-08-23": { name: "ワーナーブラザース スタジオツアー東京（としまえん）", lat: 35.7447, lng: 139.6480 },
         "2026-08-29": { name: "高円寺阿波おどり（高円寺）", lat: 35.7053, lng: 139.6497 },
         "2026-08-30": { name: "横浜・馬車道ディナー", lat: 35.4490, lng: 139.6360 },
+        "2026-09-05": { name: "日暮里・谷中（谷中ぎんざ）", lat: 35.7305, lng: 139.7712 },
       };
 
       const DEFAULT_SPOTS = [
@@ -84,6 +85,9 @@ module.exports = async function handler(req, res) {
         { name: "渋谷・表参道", lat: 35.6628, lng: 139.7038 },
         { name: "吉祥寺・井の頭公園", lat: 35.7001, lng: 139.5794 },
         { name: "横浜みなとみらい", lat: 35.4522, lng: 139.6380 },
+        { name: "北千住（北千住マルイ）", lat: 35.7512, lng: 139.8049 },
+        { name: "日暮里・谷中（谷中ぎんざ）", lat: 35.7305, lng: 139.7712 },
+        { name: "大井町（すずらん通り）", lat: 35.6074, lng: 139.7359 },
       ];
 
       const backfillPromises = [];
@@ -104,19 +108,36 @@ module.exports = async function handler(req, res) {
         // 手動で設定された位置情報（manual: true または isManualLocation: true）は上書きしない
         const isManual = Boolean(doc.location?.manual || doc.isManualLocation);
         const isDefaultLocation = !doc.location || typeof doc.location.lat !== "number";
-        const isKnownMismatch = !isManual && DATE_SPOT_MAP[dateKey] && (!doc.location?.spotName || doc.location.spotName !== spot.name);
 
-        if (!isManual && (isDefaultLocation || isKnownMismatch)) {
-          const jitterLat = ((idx * 13) % 20 - 10) * 0.0012;
-          const jitterLng = ((idx * 17) % 20 - 10) * 0.0012;
-          doc.location = {
-            lat: +(spot.lat + jitterLat).toFixed(6),
-            lng: +(spot.lng + jitterLng).toFixed(6),
-            spotName: spot.name,
-          };
-          backfillPromises.push(
-            collection.updateOne({ id: doc.id, albumId }, { $set: { location: doc.location } })
-          );
+        if (!isManual) {
+          if (isDefaultLocation) {
+            const jitterLat = ((idx * 13) % 20 - 10) * 0.0012;
+            const jitterLng = ((idx * 17) % 20 - 10) * 0.0012;
+            doc.location = {
+              lat: +(spot.lat + jitterLat).toFixed(6),
+              lng: +(spot.lng + jitterLng).toFixed(6),
+              spotName: spot.name,
+            };
+            backfillPromises.push(
+              collection.updateOne({ id: doc.id, albumId }, { $set: { location: doc.location } })
+            );
+          } else if (!doc.location.spotName) {
+            let assignedName = spot.name;
+            if (doc.location.lat > 35.74 && doc.location.lat < 35.76) assignedName = "北千住（北千住マルイ）";
+            else if (doc.location.lat < 35.65) assignedName = "大井町（すずらん通り）";
+            doc.location.spotName = assignedName;
+            backfillPromises.push(
+              collection.updateOne({ id: doc.id, albumId }, { $set: { "location.spotName": assignedName } })
+            );
+          } else if (DATE_SPOT_MAP[dateKey] && doc.location.spotName !== spot.name) {
+            // スポット名のみ更新
+            if (dateKey !== "2026-09-05") { // 9/5は北千住・日暮里・大井町が混在するため上書きしない
+              doc.location.spotName = spot.name;
+              backfillPromises.push(
+                collection.updateOne({ id: doc.id, albumId }, { $set: { "location.spotName": spot.name } })
+              );
+            }
+          }
         }
       });
 

@@ -2339,6 +2339,7 @@ const DATE_SPOT_MAP = {
   "2026-08-23": { name: "ワーナーブラザース スタジオツアー東京（としまえん）", lat: 35.7447, lng: 139.6480 },
   "2026-08-29": { name: "高円寺阿波おどり（高円寺）", lat: 35.7053, lng: 139.6497 },
   "2026-08-30": { name: "横浜・馬車道ディナー", lat: 35.4490, lng: 139.6360 },
+  "2026-09-05": { name: "日暮里・谷中（谷中ぎんざ）", lat: 35.7305, lng: 139.7712 },
 };
 
 const DEFAULT_FALLBACK_SPOTS = [
@@ -2346,6 +2347,9 @@ const DEFAULT_FALLBACK_SPOTS = [
   { name: "渋谷・表参道", lat: 35.6628, lng: 139.7038 },
   { name: "吉祥寺・井の頭公園", lat: 35.7001, lng: 139.5794 },
   { name: "横浜みなとみらい", lat: 35.4522, lng: 139.6380 },
+  { name: "北千住（北千住マルイ）", lat: 35.7512, lng: 139.8049 },
+  { name: "日暮里・谷中（谷中ぎんざ）", lat: 35.7305, lng: 139.7712 },
+  { name: "大井町（すずらん通り）", lat: 35.6074, lng: 139.7359 },
 ];
 
 function assignFallbackLocationsIfNeeded(photos) {
@@ -2366,9 +2370,8 @@ function assignFallbackLocationsIfNeeded(photos) {
 
     const spot = DATE_SPOT_MAP[dateKey] || DEFAULT_FALLBACK_SPOTS[idx % DEFAULT_FALLBACK_SPOTS.length];
     const isMissingLocation = !photo.location || typeof photo.location.lat !== "number" || typeof photo.location.lng !== "number";
-    const isKnownMismatch = DATE_SPOT_MAP[dateKey] && (!photo.location?.spotName || photo.location.spotName !== spot.name);
 
-    if (isMissingLocation || isKnownMismatch) {
+    if (isMissingLocation) {
       const jitterLat = ((idx * 13) % 20 - 10) * 0.0012;
       const jitterLng = ((idx * 17) % 20 - 10) * 0.0012;
       photo.location = {
@@ -2376,6 +2379,16 @@ function assignFallbackLocationsIfNeeded(photos) {
         lng: +(spot.lng + jitterLng).toFixed(6),
         spotName: spot.name,
       };
+    } else if (!photo.location.spotName) {
+      // GPS座標はあるがspotNameがない場合は座標から適切な名前を推測・付与
+      let assignedName = spot.name;
+      if (photo.location.lat > 35.74 && photo.location.lat < 35.76) assignedName = "北千住（北千住マルイ）";
+      else if (photo.location.lat < 35.65) assignedName = "大井町（すずらん通り）";
+      photo.location.spotName = assignedName;
+    } else if (DATE_SPOT_MAP[dateKey] && photo.location.spotName !== spot.name) {
+      if (dateKey !== "2026-09-05") { // 9/5は北千住・日暮里・大井町が混在するため上書きしない
+        photo.location.spotName = spot.name;
+      }
     }
   });
 }
