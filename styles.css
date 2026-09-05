@@ -595,9 +595,10 @@ body.theme-dark .play-button {
   border-radius: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   font-weight: 800;
   box-shadow: none;
+  letter-spacing: -0.01em;
 }
 
 .segment.active {
@@ -866,12 +867,98 @@ body.theme-dark .play-button {
   width: auto;
 }
 
-body.mood-day {
-  --stage-filter: saturate(1.18) contrast(1.02) brightness(1.04);
+/* ===== 🎭 ムード & エフェクト ===== */
+
+/* 🎬 Cinema - シネスコレターボックス＋クールトーン */
+body.mood-cinema {
+  --stage-filter: saturate(0.72) contrast(1.28) brightness(0.85) sepia(0.18);
+}
+body.mood-cinema .hero-image-wrapper::before,
+body.mood-cinema .hero-image-wrapper::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 14%;
+  background: #000;
+  z-index: 4;
+  pointer-events: none;
+}
+body.mood-cinema .hero-image-wrapper::before { top: 0; }
+body.mood-cinema .hero-image-wrapper::after  { bottom: 0; }
+
+/* 🌸 Romance - 温かみピンク＋やわらかケンバーンズ */
+body.mood-romance {
+  --stage-filter: saturate(1.6) contrast(1.08) brightness(1.12) hue-rotate(-14deg);
+}
+body.mood-romance .hero-photo img {
+  animation: photoFadeIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both,
+             kenburnsZoom 14s ease-in-out infinite alternate;
+}
+body.mood-romance .hero-image-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(255, 120, 140, 0.22) 100%);
+  z-index: 3;
+  pointer-events: none;
 }
 
+/* 🌙 Night - ディープ夜景・寒色・高コントラスト */
 body.mood-night {
-  --stage-filter: saturate(0.96) contrast(1.1) brightness(0.86);
+  --stage-filter: saturate(0.45) contrast(1.42) brightness(0.62) hue-rotate(210deg);
+}
+body.mood-night .hero-image-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(10, 10, 40, 0.55) 100%);
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* 🌅 Sunset - 夕焼けゴールデン・暖色セピア */
+body.mood-sunset {
+  --stage-filter: saturate(1.5) contrast(1.15) brightness(1.06) sepia(0.58) hue-rotate(-28deg);
+}
+body.mood-sunset .hero-image-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 140, 40, 0.15) 0%, rgba(200, 60, 20, 0.25) 100%);
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* 🖤 Mono - クラシックモノクロ＋ヴィネット */
+body.mood-mono {
+  --stage-filter: grayscale(1) contrast(1.22) brightness(0.90) sepia(0.28);
+}
+body.mood-mono .hero-image-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.52) 100%);
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* ✨ Dream - 夢の中・ふんわり高輝度＋ドリーミーズーム */
+body.mood-dream {
+  --stage-filter: saturate(1.15) contrast(0.84) brightness(1.30);
+}
+body.mood-dream .hero-photo img {
+  animation: photoFadeIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) both,
+             kenburnsZoom 18s ease-in-out infinite alternate;
+}
+body.mood-dream .hero-image-wrapper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, rgba(255, 240, 255, 0.35) 0%, transparent 65%);
+  z-index: 3;
+  pointer-events: none;
+  mix-blend-mode: screen;
 }
 
 @media (max-width: 1050px) {

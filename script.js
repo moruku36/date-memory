@@ -1906,8 +1906,12 @@ async function loadInitialPhotos() {
 
 function applyMood(mood) {
   state.mood = mood;
-  document.body.classList.remove("mood-day", "mood-night");
-  if (mood !== "cinema") document.body.classList.add(`mood-${mood}`);
+  document.body.classList.remove(
+    "mood-cinema", "mood-romance", "mood-night",
+    "mood-sunset", "mood-mono", "mood-dream",
+    "mood-kenburns", "mood-day"  // legacy cleanup
+  );
+  document.body.classList.add(`mood-${mood}`);
 
   document.querySelectorAll(".segment").forEach((button) => {
     button.classList.toggle("active", button.dataset.mood === mood);
@@ -1951,7 +1955,9 @@ function applyPreferences() {
     els.speedValue.textContent = "5秒";
   }
   if (preferences.themeDark) document.body.classList.add("theme-dark");
-  applyMood(preferences.mood || "cinema");
+  const validMoods = ["cinema", "romance", "night", "sunset", "mono", "dream"];
+  const savedMood = validMoods.includes(preferences.mood) ? preferences.mood : "cinema";
+  applyMood(savedMood);
 
   const viewMode = preferences.view === "grid" ? "grid" : "strip";
   state.view = viewMode;
