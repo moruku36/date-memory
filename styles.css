@@ -1181,7 +1181,28 @@ body.mood-dream .hero-image-wrapper::before {
   }
 
   .side-panel {
-    grid-template-columns: 1fr;
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 14px !important;
+    gap: 14px !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+
+  .panel-section {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    padding-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .panel-section .text-field {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .thumb-grid.grid,
@@ -1202,6 +1223,9 @@ body.mood-dream .hero-image-wrapper::before {
     display: flex;
     flex-wrap: nowrap;
     overflow-x: auto;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
     gap: 8px;
     padding-bottom: 6px;
     -webkit-overflow-scrolling: touch;
@@ -1285,20 +1309,33 @@ body.mood-dream .hero-image-wrapper::before {
     height: 320px;
   }
 
-  /* ムード切り替えボタン：スマホで押しやすい3列グリッド */
+  /* ムード切り替えボタン：スマホで押しやすい3列グリッド（幅100%・枠内完全フィット） */
   .segmented {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     gap: 6px;
     background: transparent;
     padding: 0;
   }
 
   .segment {
-    min-height: 42px;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 40px;
+    padding: 0 4px !important;
     border-radius: 8px;
     border: 1px solid var(--line);
     background: var(--paper);
-    font-size: 0.82rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .segment.active {
@@ -1329,6 +1366,15 @@ body.mood-dream .hero-image-wrapper::before {
 
   .photo-caption h2 {
     font-size: 1.25rem;
+  }
+
+  .segment {
+    font-size: 0.72rem !important;
+    padding: 0 2px !important;
+  }
+
+  .side-panel {
+    padding: 10px !important;
   }
 }
 
