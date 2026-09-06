@@ -70,11 +70,10 @@ function isOriginAllowed(origin) {
     const url = new URL(origin);
     const host = url.hostname;
     return (
-      host === "date-memory.vercel.app" ||
       host.endsWith(".vercel.app") ||
       host === "localhost" ||
       host === "127.0.0.1" ||
-      host === "moruku36.github.io"
+      host.endsWith(".github.io")
     );
   } catch {
     return false;
@@ -85,8 +84,6 @@ function setCorsHeaders(req, res) {
   const origin = req.headers.origin;
   if (origin && isOriginAllowed(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
-  } else if (!origin) {
-    res.setHeader("Access-Control-Allow-Origin", "https://date-memory.vercel.app");
   }
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,X-Admin-Token");
