@@ -10,7 +10,7 @@
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <title>デートのメモリー</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <link rel="stylesheet" href="styles.css?v=20260905_4">
+    <link rel="stylesheet" href="styles.css?v=20260906_1">
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -178,20 +178,13 @@
           </div>
         </section>
 
-        <aside class="side-panel" aria-label="コレクション">
+        <aside class="side-panel" aria-label="コレクションと設定">
           <div class="panel-section compact">
             <label class="field-label" for="albumName">メモリー名</label>
             <input id="albumName" class="text-field" type="text" value="デートのメモリー">
           </div>
 
-          <div class="panel-section">
-            <div class="section-head">
-              <h2>コレクション</h2>
-              <span id="photoCount">0枚</span>
-            </div>
-            <div class="collection-list" id="collectionList"></div>
-          </div>
-
+          <!-- 🎬 ムード & エフェクト（よく触るため上部に配置） -->
           <div class="panel-section">
             <div class="section-head">
               <h2>ムード & エフェクト</h2>
@@ -206,64 +199,91 @@
             </div>
           </div>
 
-          <div class="panel-section">
-            <div class="section-head">
-              <h2>再生速度</h2>
-              <span id="speedValue">5秒</span>
-            </div>
-            <input id="speedRange" class="range" type="range" min="3" max="10" step="1" value="5" aria-label="再生速度">
-          </div>
+          <!-- 📁 コレクション（折りたたみ可能・スマホでは横スクロールチップ） -->
+          <details class="panel-section collapsible" id="collectionsDetails" open>
+            <summary class="section-head collapsible-head">
+              <div class="collapsible-title-wrap">
+                <h2>📁 コレクション</h2>
+                <span id="photoCount">0枚</span>
+              </div>
+              <span class="collapsible-chevron">▾</span>
+            </summary>
+            <div class="collection-list" id="collectionList"></div>
+          </details>
 
-          <div class="panel-section">
-            <div class="section-head">
-              <h2>データ & 保存</h2>
-            </div>
-            <div class="share-actions">
-              <button class="button primary compact" id="zipExportBtn" type="button" disabled>
-                <svg aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
-                </svg>
-                写真の一括保存(ZIP)
-              </button>
-              <button class="button quiet compact" id="exportBtn" type="button" disabled>
-                <svg aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M12 3v12M8 11l4 4 4-4M5 21h14"></path>
-                </svg>
-                JSON書出
-              </button>
-              <label class="button quiet compact" for="albumImportInput">
-                <svg aria-hidden="true" viewBox="0 0 24 24">
-                  <path d="M12 21V9M8 13l4-4 4 4M5 3h14"></path>
-                </svg>
-                JSON読込
-              </label>
-              <input id="albumImportInput" type="file" accept="application/json,.json">
-            </div>
-            <p class="share-status" id="shareStatus" role="status" aria-live="polite"></p>
-          </div>
+          <!-- ⚙️ その他の設定（速度・データ保存・ロックは折りたたんでスッキリ化） -->
+          <details class="panel-section collapsible-section" id="otherSettingsDetails">
+            <summary class="section-head collapsible-head">
+              <div class="collapsible-title-wrap">
+                <h2>⚙️ その他の設定</h2>
+                <span class="collapsible-subtext">速度・保存・ロック</span>
+              </div>
+              <span class="collapsible-chevron">▾</span>
+            </summary>
+            <div class="collapsible-body">
+              <!-- 再生速度 -->
+              <div class="panel-sub-section">
+                <div class="section-head">
+                  <h3>再生速度</h3>
+                  <span id="speedValue">5秒</span>
+                </div>
+                <input id="speedRange" class="range" type="range" min="3" max="10" step="1" value="5" aria-label="再生速度">
+              </div>
 
-          <div class="panel-section">
-            <div class="section-head">
-              <h2>プライベートロック</h2>
-              <span id="lockStatusBadge">OFF</span>
+              <!-- データ & 保存 -->
+              <div class="panel-sub-section">
+                <div class="section-head">
+                  <h3>データ & 保存</h3>
+                </div>
+                <div class="share-actions">
+                  <button class="button primary compact" id="zipExportBtn" type="button" disabled>
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
+                    </svg>
+                    写真の一括保存(ZIP)
+                  </button>
+                  <button class="button quiet compact" id="exportBtn" type="button" disabled>
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M12 3v12M8 11l4 4 4-4M5 21h14"></path>
+                    </svg>
+                    JSON書出
+                  </button>
+                  <label class="button quiet compact" for="albumImportInput">
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M12 21V9M8 13l4-4 4 4M5 3h14"></path>
+                    </svg>
+                    JSON読込
+                  </label>
+                  <input id="albumImportInput" type="file" accept="application/json,.json">
+                </div>
+                <p class="share-status" id="shareStatus" role="status" aria-live="polite"></p>
+              </div>
+
+              <!-- プライベートロック -->
+              <div class="panel-sub-section">
+                <div class="section-head">
+                  <h3>プライベートロック</h3>
+                  <span id="lockStatusBadge">OFF</span>
+                </div>
+                <div class="lock-panel-actions">
+                  <button class="button quiet compact" id="lockConfigBtn" type="button">
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span id="lockConfigBtnText">Face ID / ロック設定</span>
+                  </button>
+                  <button class="button danger compact" id="lockNowBtn" type="button" hidden>
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    今すぐロック
+                  </button>
+                </div>
+              </div>
             </div>
-            <div class="lock-panel-actions">
-              <button class="button quiet compact" id="lockConfigBtn" type="button">
-                <svg aria-hidden="true" viewBox="0 0 24 24">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                </svg>
-                <span id="lockConfigBtnText">Face ID / ロック設定</span>
-              </button>
-              <button class="button danger compact" id="lockNowBtn" type="button" hidden>
-                <svg aria-hidden="true" viewBox="0 0 24 24">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                </svg>
-                今すぐロック
-              </button>
-            </div>
-          </div>
+          </details>
         </aside>
 
         <section class="library" aria-label="写真一覧">
@@ -322,30 +342,32 @@
       <!-- 🗺️ ふたりのデートマップ (インライン常時表示) -->
       <section class="dating-map-section" id="datingMapSection" aria-label="ふたりのデートマップ">
         <div class="dating-map-head">
-          <div>
+          <div class="dating-map-title-box">
             <p class="kicker">Memories on Map</p>
-            <h2>🗺️ ふたりのデートマップ</h2>
+            <div class="dating-map-heading-row">
+              <h2>🗺️ ふたりのデートマップ</h2>
+              <span class="dating-map-badge" id="inlineMapPinCount">0箇所の思い出</span>
+            </div>
           </div>
           <div class="dating-map-actions">
-            <span class="dating-map-badge" id="inlineMapPinCount">0箇所の思い出</span>
-            <button class="button quiet compact" id="mapManualEditBtn" type="button" title="現在選択中の写真の場所を修正">
+            <button class="button quiet compact map-action-btn" id="mapManualEditBtn" type="button" title="現在選択中の写真の場所を修正">
               <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
                 <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
               </svg>
-              ✏️ 写真の場所を編集
+              <span>✏️ 場所を編集</span>
             </button>
-            <button class="button quiet compact" id="mapResyncBtn" type="button" title="端末のキャッシュを更新し、最新の位置情報と再同期">
-              <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
-                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
-              </svg>
-              🔄 位置情報を再同期
-            </button>
-            <button class="button quiet compact" id="mapResetViewBtn" type="button" title="関東圏を中心にリセット">
+            <button class="button quiet compact map-action-btn" id="mapResetViewBtn" type="button" title="関東圏を中心にリセット">
               <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
                 <circle cx="12" cy="12" r="10"></circle>
                 <polygon points="12 8 8 12 12 16 12 8"></polygon>
               </svg>
-              関東圏を中心にする
+              <span>関東圏を中心に</span>
+            </button>
+            <button class="button quiet compact map-action-btn" id="mapResyncBtn" type="button" title="端末のキャッシュを更新し、最新の位置情報と再同期">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
+                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+              </svg>
+              <span>🔄 再同期</span>
             </button>
           </div>
         </div>
