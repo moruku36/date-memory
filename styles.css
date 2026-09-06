@@ -2795,6 +2795,139 @@ details[open] > summary .collapsible-chevron {
   font-weight: 700;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   📱 Mobile Modal & Responsive Enhancements (Under 768px)
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* 📍 場所編集モーダルのスマホ最適化（画面下部・キーボード被り防止） */
+  .location-edit-modal {
+    padding: 8px;
+    align-items: flex-end;
+  }
+
+  .location-edit-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 88vh;
+    border-radius: 18px 18px 8px 8px;
+  }
+
+  .location-edit-head {
+    padding: 12px 16px;
+  }
+
+  .location-edit-title h2 {
+    font-size: 1.05rem;
+  }
+
+  .location-edit-body {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+
+  .location-edit-target {
+    padding: 8px 12px;
+    gap: 10px;
+  }
+
+  .location-edit-thumb {
+    width: 48px;
+    height: 48px;
+  }
+
+  .location-edit-target-title {
+    font-size: 0.86rem;
+  }
+
+  .location-edit-target-date,
+  .location-edit-target-current {
+    font-size: 0.76rem;
+  }
+
+  .location-edit-scope-box {
+    padding: 10px 12px;
+  }
+
+  .location-scope-title {
+    font-size: 0.78rem;
+  }
+
+  .scope-radio-item {
+    font-size: 0.8rem;
+  }
+
+  .loc-picker-map-container {
+    height: 160px;
+  }
+
+  .location-edit-foot {
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    gap: 8px;
+  }
+
+  .location-edit-foot .button {
+    min-height: 42px;
+    font-size: 0.88rem;
+  }
+
+  /* ℹ️ 写真詳細情報モーダルのスマホ最適化 */
+  .info-modal {
+    padding: 8px;
+    align-items: flex-end;
+  }
+
+  .info-card {
+    width: 100% !important;
+    max-height: 86vh;
+    padding: 16px;
+    border-radius: 18px 18px 8px 8px;
+    gap: 14px;
+  }
+
+  .info-card-head {
+    padding-bottom: 10px;
+  }
+
+  .info-card-title h2 {
+    font-size: 1.08rem;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .info-item {
+    padding: 10px 12px;
+  }
+
+  /* 🔒 ロック画面・設定モーダルのスマホ最適化 */
+  .lock-modal {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .lock-modal-card {
+    width: 100% !important;
+    max-height: 88vh;
+    overflow-y: auto;
+    border-radius: 18px 18px 8px 8px;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .lock-card {
+    width: 100% !important;
+    padding: 0 10px;
+  }
+
+  .pin-key {
+    width: 66px;
+    height: 66px;
+    font-size: 1.45rem;
+  }
+}
+
+
 
 
 
