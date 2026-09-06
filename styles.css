@@ -1001,23 +1001,23 @@ body.mood-dream .hero-image-wrapper::before {
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .app-shell {
-    padding: 10px 8px;
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
+    padding: 10px 8px calc(30px + env(safe-area-inset-bottom, 0px));
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .topbar {
     align-items: stretch;
     flex-direction: column;
-    width: 100%;
-    max-width: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
   .top-actions {
-    width: 100%;
+    width: 100% !important;
     justify-content: space-between;
     flex-wrap: wrap;
   }
@@ -1110,6 +1110,126 @@ body.mood-dream .hero-image-wrapper::before {
     grid-column: span 1;
     grid-row: span 1;
     min-height: 105px;
+  }
+
+  /* コレクション：スマホでは横スクロール可能なピル／チップ形式で超省スペース化 */
+  .collection-list {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .collection-list::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .collection-list::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border-radius: 4px;
+  }
+
+  .collection-item {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 110px;
+    max-width: 170px;
+    padding: 6px 10px 6px 6px;
+    border-radius: 24px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .collection-item > span:last-child {
+    display: none; /* スマホでは '>' 矢印を非表示にしてスリム化 */
+  }
+
+  .collection-item img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+  }
+
+  .collection-item strong {
+    font-size: 0.8rem;
+  }
+
+  .collection-item small {
+    font-size: 0.7rem;
+  }
+
+  /* デートマップ：ヘッダーを縦積み＆ボタン群を横スクロールで文字縦割れを100%根絶 */
+  .dating-map-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .dating-map-title-box {
+    width: 100%;
+  }
+
+  .dating-map-actions {
+    width: 100%;
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .dating-map-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .map-action-btn {
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 0 14px;
+    font-size: 0.8rem;
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+  }
+
+  .dating-map-canvas {
+    height: 320px;
+  }
+
+  /* ムード切り替えボタン：スマホで押しやすい3列グリッド */
+  .segmented {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    background: transparent;
+    padding: 0;
+  }
+
+  .segment {
+    min-height: 42px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    font-size: 0.82rem;
+  }
+
+  .segment.active {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+  }
+
+  /* 全体コンポーネントの幅100%徹底・余白あふれ防止 */
+  .side-panel,
+  .library,
+  .dating-map-section,
+  .on-this-day-banner {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 }
 
@@ -2590,237 +2710,8 @@ details[open] > summary .collapsible-chevron {
   font-weight: 700;
 }
 
-/* ══════════════════════════════════════════════════════════════
-   Memories on Map Section Styles
-   ══════════════════════════════════════════════════════════════ */
-.dating-map-section {
-  margin-top: 24px;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: var(--shadow);
-}
 
-.dating-map-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 10px;
-}
 
-.dating-map-title-box .kicker {
-  margin: 0 0 2px;
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
 
-.dating-map-heading-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.dating-map-heading-row h2 {
-  margin: 0;
-  font-size: 1.15rem;
-}
-
-.dating-map-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 0.76rem;
-  font-weight: 700;
-  background: color-mix(in srgb, var(--accent), transparent 85%);
-  color: var(--accent);
-  white-space: nowrap;
-}
-
-.dating-map-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.map-action-btn {
-  white-space: nowrap !important;
-  word-break: keep-all !important;
-  font-size: 0.82rem;
-  padding: 6px 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.map-action-btn span {
-  white-space: nowrap !important;
-}
-
-.dating-map-hint {
-  font-size: 0.8rem;
-  color: var(--muted);
-  margin: 4px 0 12px;
-  line-height: 1.4;
-}
-
-.dating-map-frame {
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.dating-map-canvas {
-  width: 100%;
-  height: 380px;
-}
-
-/* ══════════════════════════════════════════════════════════════
-   Smartphone / Mobile Responsive UI Optimization (< 768px)
-   ══════════════════════════════════════════════════════════════ */
-@media (max-width: 768px) {
-  .app-shell {
-    padding-bottom: calc(30px + env(safe-area-inset-bottom, 0px));
-  }
-
-  .workspace {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .memory-stage {
-    min-height: 48vh;
-    max-height: 55vh;
-  }
-
-  /* コレクション：スマホでは横スクロール可能なピル／チップ形式で超省スペース化 */
-  .collection-list {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    gap: 8px;
-    padding-bottom: 6px;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-  }
-
-  .collection-list::-webkit-scrollbar {
-    height: 4px;
-  }
-
-  .collection-list::-webkit-scrollbar-thumb {
-    background: var(--line);
-    border-radius: 4px;
-  }
-
-  .collection-item {
-    flex: 0 0 auto;
-    width: auto;
-    min-width: 110px;
-    max-width: 170px;
-    padding: 6px 10px 6px 6px;
-    border-radius: 24px;
-    grid-template-columns: 32px minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .collection-item > span:last-child {
-    display: none; /* スマホでは '>' 矢印を非表示にしてスリム化 */
-  }
-
-  .collection-item img {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-  }
-
-  .collection-item strong {
-    font-size: 0.8rem;
-  }
-
-  .collection-item small {
-    font-size: 0.7rem;
-  }
-
-  /* デートマップ：ヘッダーを縦積み＆ボタン群を横スクロールで文字縦割れを100%根絶 */
-  .dating-map-head {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .dating-map-title-box {
-    width: 100%;
-  }
-
-  .dating-map-actions {
-    width: 100%;
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    gap: 8px;
-    padding-bottom: 4px;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .dating-map-actions::-webkit-scrollbar {
-    display: none;
-  }
-
-  .map-action-btn {
-    flex: 0 0 auto;
-    min-height: 38px;
-    padding: 0 14px;
-    font-size: 0.8rem;
-    white-space: nowrap !important;
-    word-break: keep-all !important;
-  }
-
-  .dating-map-canvas {
-    height: 320px;
-  }
-
-  /* ムード切り替えボタン：スマホで押しやすい2列グリッド */
-  .segmented {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-    background: transparent;
-    padding: 0;
-  }
-
-  .segment {
-    min-height: 42px;
-    border-radius: 8px;
-    border: 1px solid var(--line);
-    background: var(--paper);
-    font-size: 0.82rem;
-  }
-
-  .segment.active {
-    background: var(--ink);
-    color: var(--paper);
-    border-color: var(--ink);
-  }
-
-  /* 全体コンポーネントの幅100%徹底・余白あふれ防止 */
-  .side-panel,
-  .library,
-  .dating-map-section,
-  .on-this-day-banner {
-    width: 100% !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-  }
-}
 
 

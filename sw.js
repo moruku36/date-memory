@@ -1,4 +1,4 @@
-const CACHE_NAME = 'date-memory-v18';
+const CACHE_NAME = 'date-memory-v19';
 const ASSETS = [
   './',
   './index.html',
