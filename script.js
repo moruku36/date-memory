@@ -3045,9 +3045,10 @@ async function saveLocationEdit() {
     } catch (cacheErr) {
       console.warn("Cache write warning:", cacheErr);
     }
-    updateInlineMap();
-    renderCurrentPhoto();
     closeLocationEditModal();
+    renderHero();
+    renderThumbs();
+    updateInlineMap();
 
     showBgmToast(`📍 場所を「${spotName}」に更新しました！（${targetPhotos.length}枚）`);
   } catch (err) {
