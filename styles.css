@@ -880,6 +880,11 @@ body.theme-dark .play-button {
 
 /* ===== 🎭 ムード & エフェクト ===== */
 
+/* 🌿 Natural - エフェクトなし（本来の写真の美しさをそのまま表示） */
+body.mood-natural {
+  --stage-filter: none;
+}
+
 /* 🎬 Cinema - シネスコレターボックス＋クールトーン */
 body.mood-cinema {
   --stage-filter: saturate(0.72) contrast(1.28) brightness(0.85) sepia(0.18);
@@ -937,19 +942,6 @@ body.mood-sunset .hero-image-wrapper::before {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, rgba(255, 140, 40, 0.15) 0%, rgba(200, 60, 20, 0.25) 100%);
-  z-index: 3;
-  pointer-events: none;
-}
-
-/* 🖤 Mono - クラシックモノクロ＋ヴィネット */
-body.mood-mono {
-  --stage-filter: grayscale(1) contrast(1.22) brightness(0.90) sepia(0.28);
-}
-body.mood-mono .hero-image-wrapper::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.52) 100%);
   z-index: 3;
   pointer-events: none;
 }

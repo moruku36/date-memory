@@ -29,7 +29,7 @@ const state = {
   timer: null,
   speed: 5000,
   view: "strip",
-  mood: "cinema",
+  mood: "natural",
   selectionMode: false,
   selectedIds: new Set(),
   renderedThumbCount: THUMB_BATCH_SIZE,
@@ -1931,7 +1931,7 @@ async function loadInitialPhotos() {
 function applyMood(mood) {
   state.mood = mood;
   document.body.classList.remove(
-    "mood-cinema", "mood-romance", "mood-night",
+    "mood-natural", "mood-cinema", "mood-romance", "mood-night",
     "mood-sunset", "mood-mono", "mood-dream",
     "mood-kenburns", "mood-day"  // legacy cleanup
   );
@@ -1979,8 +1979,8 @@ function applyPreferences() {
     els.speedValue.textContent = "5秒";
   }
   if (preferences.themeDark) document.body.classList.add("theme-dark");
-  const validMoods = ["cinema", "romance", "night", "sunset", "mono", "dream"];
-  const savedMood = validMoods.includes(preferences.mood) ? preferences.mood : "cinema";
+  const validMoods = ["natural", "cinema", "romance", "night", "sunset", "dream"];
+  const savedMood = validMoods.includes(preferences.mood) ? preferences.mood : "natural";
   applyMood(savedMood);
 
   const viewMode = preferences.view === "grid" ? "grid" : "strip";
