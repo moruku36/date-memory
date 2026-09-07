@@ -2998,10 +2998,14 @@ async function saveLocationEdit() {
       p.isManualLocation = true;
     });
 
-    // 2. ローカル保存 (IndexedDB)
+    // 2. ローカル保存 (IndexedDB - local photos only)
     for (const p of targetPhotos) {
-      if (p.source === "local" || p.blob) {
-        await savePhoto(p);
+      if (p.source === "local" || (p.blob && p.source !== "cloud")) {
+        try {
+          await savePhoto(p);
+        } catch (dbErr) {
+          console.warn("IndexedDB save warning:", dbErr);
+        }
       }
     }
 
@@ -3020,7 +3024,7 @@ async function saveLocationEdit() {
           });
           if (!res.ok) {
             // 個別フォールバック
-            await Promise.all(
+            await Promise.allSettled(
               cloudPhotoIds.map((id) =>
                 fetch(apiUrl(`/api/photos/${encodeURIComponent(id)}`), {
                   method: "PATCH",
@@ -3036,7 +3040,11 @@ async function saveLocationEdit() {
       }
     }
 
-    writeCloudPhotoCache(state.photos);
+    try {
+      writeCloudPhotoCache(state.photos);
+    } catch (cacheErr) {
+      console.warn("Cache write warning:", cacheErr);
+    }
     updateInlineMap();
     renderCurrentPhoto();
     closeLocationEditModal();
