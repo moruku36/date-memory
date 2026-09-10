@@ -2272,9 +2272,17 @@ const bgmPlayer = {
     this.isPlaying = !this.isPlaying;
     const offIcon = els.bgmToggle?.querySelector(".bgm-off-icon");
     const onIcon = els.bgmToggle?.querySelector(".bgm-on-icon");
-    if (offIcon) offIcon.hidden = this.isPlaying;
-    if (onIcon) onIcon.hidden = !this.isPlaying;
+    if (offIcon) {
+      offIcon.hidden = this.isPlaying;
+      offIcon.style.display = this.isPlaying ? "none" : "";
+    }
+    if (onIcon) {
+      onIcon.hidden = !this.isPlaying;
+      onIcon.style.display = !this.isPlaying ? "none" : "";
+    }
     els.bgmToggle?.classList.toggle("active", this.isPlaying);
+    els.bgmToggle?.setAttribute("title", this.isPlaying ? "BGM停止" : "BGM再生");
+    els.bgmToggle?.setAttribute("aria-label", this.isPlaying ? "BGM停止" : "BGM再生");
 
     if (this.isPlaying) {
       // ランダムにジャンルを選択

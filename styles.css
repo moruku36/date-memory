@@ -2418,7 +2418,30 @@ body.theater-mode .memory-stage {
   margin-top: 2px;
 }
 
-/* 🎵 BGMミニトースト通知 */
+/* 🎵 BGMトグルボタン & ミニトースト通知 */
+#bgmToggle .bgm-off-icon,
+#bgmToggle .bgm-on-icon {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#bgmToggle .bgm-off-icon {
+  stroke-width: 2;
+}
+
+#bgmToggle .bgm-on-icon {
+  stroke-width: 2;
+}
+
+#bgmToggle[aria-label="BGM停止"] {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
 .bgm-toast {
   position: fixed;
   top: 76px;
