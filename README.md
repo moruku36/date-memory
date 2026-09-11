@@ -2,6 +2,34 @@
 
 ふたりのデートの思い出や日常の写真を記録・振り返るためのプライベートWebアルバムアプリです。
 
+## システム構成図 (Architecture)
+
+![System Architecture](docs/architecture.jpg)
+
+### アーキテクチャの概要
+
+本アプリケーションは、**「フロントエンドSPA / PWA」**、**「Vercel サーバーレスバックエンド」**、**「クラウドデータベース」** の3層構造で設計されています。
+
+1. **Client / Browser / PWA (フロントエンド層)**
+   - **SPA UI (HTML5 / CSS3 / JavaScript)**: バンドラー不要の素早い動作とレスポンシブなUI操作を提供。
+   - **Photo & Map Libs**:
+     - `Leaflet.js`: 国土地理院タイルを用いたスポット・地図のインタラクティブ描画。
+     - `EXIF.js`: アップロード写真からの撮影日時・GPS位置情報等のメタデータ抽出。
+   - **PWA / Offline**:
+     - `Service Worker (sw.js)`: アプリシェルと静的アセットをオフラインキャッシュ。
+     - `IndexedDB`: 端末ローカルへの写真データ・キャッシュ保持により、オフライン閲覧および高速表示を実現。
+
+2. **Vercel Platform / Serverless Functions (API・バックエンド層)**
+   - **Serverless API**:
+     - `/api/photos` / `/api/photos/{id}`: REST API経由でJSONおよび画像Base64データの送受信・部分更新（PATCH）を処理。
+   - **Backend Logic**:
+     - `sharp`: サーバーレス環境での画像最適化および軽量サムネイルの自動生成。
+     - `mongoose / MongoDB Driver`: 接続プーリングを考慮した効率的なデータベース接続とCRUD操作。
+
+3. **Database / Data Layer (データ層)**
+   - **Primary Database**: `MongoDB Atlas` をメインのクラウドデータストアとして使用。写真メタデータ・Base64画像データを永続化。
+   - **Optional / Alternative**: `Supabase` への接続モジュールも備えており、将来的なストレージ拡張や代替バックエンドへの移行に対応。
+
 ## 主な機能
 
 - **スライドショー & メモリー再生**: 写真を自動再生、スワイプ操作、表示速度調整に対応。
