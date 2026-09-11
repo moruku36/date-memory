@@ -1,83 +1,71 @@
 # Date Memory
 
-写真をアップロードして、デートの思い出をメモリー再生できるWebサイトです。
+ふたりのデートの思い出や日常の写真を記録・振り返るためのプライベートWebアルバムアプリです。
 
-## 写真の保存
+## 主な機能
 
-初期状態では写真はブラウザ内に保存されます。この場合、PCで追加した写真はスマホには表示されません。
+- **スライドショー & メモリー再生**: 写真を自動再生、スワイプ操作、表示速度調整に対応。
+- **ムード & エフェクト**: 6種類の写真フィルター（Natural、Cinema、Romance、Night、Sunset、Dream）で思い出の雰囲気を演出。
+- **ふたりのデートマップ**:
+  - EXIF位置情報または日付・手動指定による訪問スポットのマッピング（国土地理院地図・Leaflet採用）。
+  - 写真ごとの場所・スポット名編集（同日写真への一括反映、マップからのピン選択）。
+- **BGMプレイヤー**:
+  - Web Audio APIによる環境音・メロディ自動生成（オルゴール調、カフェピアノ風、アコースティック風、星空アンビエント）。
+  - 再生中（♪）/ 停止中（消音アイコン）の視覚的ステータス表示。
+- **過去の今日の思い出**: 過去の同じ月日に撮影された写真を自動検知してハイライト表示。
+- **写真の詳細 & メモ**: 撮影日時、曜日、カメラ情報、解像度、サイズ表示、写真ごとのメモ機能。
+- **写真のエクスポート**: 単体ダウンロード、全写真・メタデータのZIP一括ダウンロード、JSONバックアップ。
+- **プライベートロック**: 4桁の暗証番号（PINコード）によるアクセス保護。
+- **PWA・オフライン対応**: Service Workerによるキャッシュ、モバイル向けレスポンシブ最適化。
 
-PC、iPhone、別ブラウザで同じ写真を参照するには、MongoDB Atlasへ保存するAPIをデプロイしてください。このリポジトリにはVercel向けのAPIを同梱しています。
+## 写真の保存とクラウド同期 (MongoDB Atlas + Vercel)
 
-## MongoDB Atlas + Vercel設定
+端末（ブラウザ）ローカルのIndexedDBに加え、MongoDB AtlasをバックエンドとしたAPI連携により、PCやスマートフォン間でリアルタイムに写真を共有・同期できます。
 
-1. MongoDB AtlasでDatabase Userを作成します。
-2. Atlasの接続文字列を取得します。形式は `mongodb+srv://USER:PASSWORD@HOST/...` です。
-3. VercelでこのGitHubリポジトリをImportします。
-4. VercelのEnvironment Variablesに以下を設定します。
+### 環境変数の設定 (Vercel)
+
+Vercelのプロジェクト設定（Environment Variables）に以下を設定します：
 
 ```txt
-MONGODB_URI=mongodb+srv://USER:PASSWORD@HOST/?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://<USER>:<PASSWORD>@<HOST>/?retryWrites=true&w=majority
 MONGODB_DB=date_memory
 MONGODB_COLLECTION=photos
-ALBUM_ID=date-memory-main
+ALBUM_ID=推測されにくいアルバム識別子
 ```
 
-削除機能もクラウドに対して有効にしたい場合だけ、以下も設定します。
+管理者専用の削除・操作を制限したい場合は、任意で以下を設定します：
 
 ```txt
 ADMIN_TOKEN=推測されにくい長い文字列
 ```
 
-`ADMIN_TOKEN` を設定しない場合、公開アプリから共有アルバム全体の一括削除はできません。これは、URLを知っている人が誤って全写真を削除できないようにするためです。
+### クライアント設定 (`config.js`)
 
-写真一覧の「選択」から、選んだ写真だけを個別に削除できます。
-
-写真一覧とコレクションのカバーには軽量サムネイルを使います。新規アップロード時にサムネイルを保存し、既存写真はサムネイル初回表示時にサーバー側で生成して保存します。写真一覧のメタデータはブラウザにもキャッシュされるため、再訪問時は前回の一覧を先に表示しながら最新状態を確認します。
-
-5. VercelにDeployします。
-6. `config.js` を以下のように変更します。
-
-同じVercel上でWebサイトも動かす場合:
+同一オリジンまたはホスト名判定により自動でAPIに接続されます。
 
 ```js
 window.DATE_MEMORY_CLOUD = {
   enabled: true,
   provider: "api",
-  apiBaseUrl: "",
-  albumId: "date-memory-main",
+  apiBaseUrl: "", // 同一ホストの場合は空文字
+  albumId: "YOUR_ALBUM_ID",
   adminToken: "",
 };
 ```
 
-GitHub Pagesを表示元にして、APIだけVercelを使う場合:
+> **セキュリティ上の注意**
+> - 本リポジトリやコミット履歴に、本番環境の公開URLやデータベースの接続パスワード、APIシークレット等の機密情報を記載しないでください。
+> - アプリを第三者に公開したくない場合は、GitHubリポジトリの設定をPrivateにしてください。
 
-```js
-window.DATE_MEMORY_CLOUD = {
-  enabled: true,
-  provider: "api",
-  apiBaseUrl: "https://YOUR_VERCEL_APP.vercel.app",
-  albumId: "date-memory-main",
-  adminToken: "",
-};
-```
+## ローカル開発・検証
 
-`albumId` は共有アルバムIDです。URLを知っている人が写真を追加・閲覧できる想定なので、必要なら推測されにくい値に変更してください。
-
-## 注意
-
-MongoDBのパスワードやAPIキーを `config.js` に入れないでください。`config.js` はブラウザから誰でも読めます。秘密情報は必ずVercelのEnvironment Variablesに入れてください。
-
-すでにチャット等に貼ったキーは漏えい済みとして扱い、MongoDB Atlas側でローテーションすることをおすすめします。
-
-## ローカル確認
-
-静的サイトだけ確認する場合:
+静的ファイルのみ確認する場合:
 
 ```sh
 python3 -m http.server 4173
 ```
 
-Vercel APIも含めて確認する場合:
+API（Serverless Functions）を含めてローカルで起動する場合:
 
 ```sh
 npm install
